@@ -1,0 +1,1310 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="HavaDuru: canlı hava durumu, 10 günlük tahmin, polen, 3B dünya hava haritası, yağış radarı ve paylaşılabilir hava kartı.">
+<meta name="theme-color" content="#2466E0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5' fill='%23E08A0B'/%3E%3Cg stroke='%23E08A0B' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2'/%3E%3C/g%3E%3C/svg%3E">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>HavaDuru</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Yerleşim: üst çubuk (ad, birim/dil, ülke/şehir) → favoriler şeridi → aktivite → derece + gökyüzü sahnesi → ölçümler → grafik → güneş | ay → yağış radarı */
+:root{
+  --bg:#EDF1F6; --surface:#FFFFFF; --surface-2:#F4F7FB; --line:#DCE3EC;
+  --fg:#101B2D; --muted:#5C6B80; --accent:#2466E0; --accent-soft:#DCE8FF;
+  --sun:#E08A0B; --good:#1F9D62; --warn:#C98A04; --bad:#D4492F;
+  --shadow:0 1px 2px rgba(16,27,45,.05),0 12px 32px -18px rgba(16,27,45,.25);
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"Instrument Sans","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0A111E; --surface:#111B2D; --surface-2:#172338; --line:#24324A;
+  --fg:#E8EEF7; --muted:#93A2B8; --accent:#6EA2FF; --accent-soft:#1B2D4F;
+  --sun:#F5B041; --good:#4CC38A; --warn:#E3B341; --bad:#F0705A;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 16px 36px -20px rgba(0,0,0,.7); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0A111E; --surface:#111B2D; --surface-2:#172338; --line:#24324A;
+  --fg:#E8EEF7; --muted:#93A2B8; --accent:#6EA2FF; --accent-soft:#1B2D4F;
+  --sun:#F5B041; --good:#4CC38A; --warn:#E3B341; --bad:#F0705A;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 16px 36px -20px rgba(0,0,0,.7); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45;margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:18px 40px;display:flex;flex-direction:column;gap:16px}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* üst çubuk */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.brand{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px;margin-right:auto}
+.brand svg{color:var(--sun)}
+.prefs{display:flex;gap:6px;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--surface-2);border-radius:999px;padding:3px}
+.bar .seg{background:var(--surface);border:1px solid var(--line)}
+.seg button{border:0;background:none;border-radius:999px;padding:6px 12px;cursor:pointer;color:var(--muted);font-weight:500;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--surface)}
+.panel .seg button[aria-pressed="true"]{background:var(--surface);color:var(--fg);box-shadow:0 1px 3px rgba(16,27,45,.14)}
+.pick{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.field{position:relative;display:flex;align-items:center}
+.field>svg{position:absolute;left:11px;color:var(--muted);pointer-events:none}
+.field select,.field input{background:var(--surface);border:1px solid var(--line);border-radius:999px;height:40px;padding:0 14px 0 34px;min-width:0}
+.field select{appearance:none;padding-right:30px;cursor:pointer;max-width:190px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 17px,calc(100% - 11px) 17px;background-size:5px 5px;background-repeat:no-repeat}
+.field input{width:190px}
+.field input::placeholder{color:var(--muted)}
+.results{position:absolute;top:46px;left:0;right:0;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;z-index:40;display:flex;flex-direction:column}
+.results button{background:none;border:0;text-align:left;padding:8px 10px;border-radius:9px;cursor:pointer}
+.results button:hover,.results button:focus-visible{background:var(--surface-2)}
+.results small{color:var(--muted);display:block}
+.results .none{padding:8px 10px;color:var(--muted)}
+
+.note{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--accent-soft);border-radius:14px;padding:10px 14px;font-size:13.5px}
+.note b{font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.chip{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px 11px;cursor:pointer;font-size:13px}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+
+/* favoriler */
+.favs{display:flex;flex-direction:column;gap:8px;min-width:0}
+.favs-h{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;font-weight:600;color:var(--muted)}
+.favs-h svg{color:var(--sun)}
+.favs-msg{text-transform:none;letter-spacing:0;font-weight:500;color:var(--bad)}
+.fav-row{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:4px;scrollbar-width:thin}
+.fav{flex:none;scroll-snap-align:start;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px 14px 10px 10px;cursor:pointer;text-align:left;min-width:168px;box-shadow:var(--shadow)}
+.fav:hover{border-color:var(--accent)}
+.fav[aria-current="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.fav svg{flex:none}
+.fav-n{display:flex;flex-direction:column;min-width:0;flex:1}
+.fav-n b{font-weight:600;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.fav-n small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.fav-t{font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:-.02em}
+.fav-empty{color:var(--muted);font-size:13.5px;padding:10px 2px}
+
+/* aktivite önerisi */
+.act{display:flex;align-items:center;gap:16px;background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:16px 20px;min-width:0}
+.act-ic{flex:none;width:56px;height:56px;border-radius:18px;background:color-mix(in srgb,var(--tint,var(--accent)) 16%,var(--surface));display:grid;place-items:center}
+.act-ic svg{width:34px;height:34px}
+.act-b{min-width:0;flex:1}
+.act-l{font-size:12px;letter-spacing:.07em;text-transform:uppercase;font-weight:600;color:var(--muted)}
+.act-t{font-family:var(--display);font-weight:600;font-size:clamp(19px,2.4vw,24px);letter-spacing:-.015em;line-height:1.2;margin-top:2px;text-wrap:balance}
+.act-s{color:var(--muted);font-size:14.5px;margin-top:3px}
+
+/* aktivite + bilgi kartları yan yana */
+.tips{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;min-width:0}
+.fact{align-items:flex-start}
+.fact .act-t{font-family:var(--body);font-weight:500;font-size:16px;letter-spacing:0;line-height:1.45;text-wrap:pretty}
+.fact-more{margin-top:8px;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 12px 5px 10px;font-size:13px;font-weight:500;cursor:pointer;color:var(--fg)}
+.fact-more:hover{border-color:var(--accent)}
+.fact-more svg{color:var(--accent)}
+@media (max-width:900px){.tips{grid-template-columns:1fr}}
+
+/* kahraman alan */
+.hero{position:relative;overflow:hidden;border-radius:28px;background:var(--surface);box-shadow:var(--shadow);min-height:330px;display:flex}
+.hero canvas{position:absolute;inset:0;width:100%;height:100%;
+  -webkit-mask-image:linear-gradient(to right,transparent 0%,rgba(0,0,0,.06) 26%,rgba(0,0,0,.45) 52%,rgba(0,0,0,.85) 76%,#000 100%);
+          mask-image:linear-gradient(to right,transparent 0%,rgba(0,0,0,.06) 26%,rgba(0,0,0,.45) 52%,rgba(0,0,0,.85) 76%,#000 100%)}
+.hero-txt{position:relative;padding:28px 32px;display:flex;flex-direction:column;justify-content:space-between;gap:18px;min-width:0;max-width:62%}
+.place{font-family:var(--display);font-weight:600;font-size:22px;letter-spacing:-.01em;display:flex;align-items:center;gap:7px}
+.place>svg{color:var(--accent);flex:none}
+.star{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;color:var(--muted);margin-left:4px}
+.star:hover{color:var(--sun);border-color:var(--sun)}
+.star[aria-pressed="true"]{color:var(--sun);border-color:var(--sun)}
+.star[aria-pressed="true"] svg{fill:var(--sun)}
+.when{color:var(--muted);font-size:14px;margin-top:2px}
+.temp-row{display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.temp{font-family:var(--display);font-weight:700;font-size:clamp(96px,17vw,172px);line-height:.86;letter-spacing:-.055em}
+.temp sup{font-size:.34em;font-weight:600;letter-spacing:0;vertical-align:top;position:relative;top:.18em;margin-left:.06em;color:var(--muted)}
+.cond{padding-top:12px;display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.cond strong{font-family:var(--display);font-weight:600;font-size:clamp(20px,2.6vw,28px);letter-spacing:-.015em;line-height:1.1}
+.cond>span{color:var(--muted);font-size:14.5px}
+.diff{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:4px 10px 4px 7px;border-radius:999px;font-size:13px;font-weight:600;background:var(--surface-2);color:var(--fg);border:1px solid var(--line)}
+.diff svg{color:var(--dc,var(--muted))}
+.hilo{display:flex;gap:16px;flex-wrap:wrap;font-size:14.5px;color:var(--muted)}
+.hilo b{color:var(--fg);font-weight:600}
+.hilo span{display:inline-flex;align-items:center;gap:5px}
+
+/* ölçümler */
+.metrics{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;background:var(--line);border-radius:22px;overflow:hidden;box-shadow:var(--shadow)}
+.m{background:var(--surface);padding:16px 16px 15px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.m-l{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:12px;letter-spacing:.07em;text-transform:uppercase;font-weight:600}
+.m-l svg{flex:none;color:var(--accent)}
+.m-v{font-family:var(--display);font-weight:600;font-size:27px;letter-spacing:-.02em;line-height:1.1;display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+.m-v small{font-family:var(--body);font-size:13px;color:var(--muted);font-weight:500;letter-spacing:0}
+.m-s{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px;min-height:20px}
+.meter{height:5px;border-radius:9px;background:var(--surface-2);flex:1;overflow:hidden}
+.meter i{display:block;height:100%;border-radius:9px;background:var(--accent)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:12.5px;color:var(--fg)}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--pc,var(--good))}
+.arrow{display:inline-flex;transition:transform .5s}
+
+/* paneller */
+.panel{background:var(--surface);border-radius:22px;box-shadow:var(--shadow);padding:20px 22px;min-width:0}
+.p-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+h2{font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:-.01em;margin:0;display:flex;align-items:center;gap:8px}
+h2 svg{color:var(--accent)}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;touch-action:pan-y}
+.chart text{font-family:var(--body);font-size:11.5px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.chart .val{fill:var(--fg);font-weight:600;font-size:12px}
+.tip{position:absolute;top:0;pointer-events:none;background:var(--fg);color:var(--bg);border-radius:10px;padding:6px 10px;font-size:12.5px;white-space:nowrap;transform:translateX(-50%)}
+.tip b{font-weight:600}
+.legend{display:flex;gap:14px;font-size:12.5px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:3px;vertical-align:middle;margin-right:5px}
+
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+#sunArc svg{display:block;width:100%;max-width:420px;margin:0 auto;height:auto}
+#sunArc text{font-family:var(--body);font-size:11px;fill:var(--muted)}
+.rows{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.rows div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rows span{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.rows span svg{color:var(--sun);flex:none}
+.rows b{font-family:var(--display);font-weight:600;font-size:20px;letter-spacing:-.01em}
+.moon-main{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.moon-main svg{flex:none}
+.moon-name{font-family:var(--display);font-weight:600;font-size:24px;letter-spacing:-.015em;line-height:1.15}
+.moon-sub{color:var(--muted);font-size:14px;margin-top:3px}
+.phases{display:flex;justify-content:space-between;gap:4px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.phases div{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);text-align:center;flex:1;min-width:0;opacity:.55}
+.phases div.on{opacity:1;color:var(--fg);font-weight:600}
+.moon-dark{fill:var(--surface-2);stroke:var(--line)}
+.moon-lit{fill:var(--sun)}
+.phases .moon-lit{fill:var(--muted)} .phases .on .moon-lit{fill:var(--sun)}
+
+/* radar */
+.map-wrap{position:relative;isolation:isolate;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+#map{height:400px;width:100%;background:var(--surface-2)}
+.map-msg{position:absolute;inset:0;z-index:1200;display:grid;place-items:center;padding:24px;text-align:center;background:color-mix(in srgb,var(--surface-2) 88%,transparent);color:var(--muted);font-size:14px}
+.map-msg div{max-width:46ch;display:flex;flex-direction:column;align-items:center;gap:8px}
+.map-msg svg{color:var(--accent)}
+.map-msg b{color:var(--fg);font-family:var(--display);font-weight:600;font-size:17px}
+.rctl{display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap}
+.playbtn{flex:none;width:40px;height:40px;border-radius:999px;border:0;background:var(--accent);color:var(--surface);display:grid;place-items:center;cursor:pointer}
+.playbtn:disabled{opacity:.4;cursor:default}
+.rctl input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+.rtime{font-weight:600;min-width:7ch}
+.rscale{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.rscale i{display:block;width:120px;height:8px;border-radius:9px;background:linear-gradient(90deg,#9BE1F2,#2FA4E0,#0C5FB8,#F5E600,#F59A00,#F04400,#B80000,#F2A8F2)}
+/* Leaflet'in gerekli stilleri (yalnızca kullanılan kısım) */
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+.leaflet-container{overflow:hidden;-webkit-tap-highlight-color:transparent;font-family:var(--body);font-size:12px}
+.leaflet-tile{user-select:none;-webkit-user-drag:none;visibility:hidden}
+.leaflet-tile-loaded{visibility:inherit}
+.leaflet-container img.leaflet-tile{max-width:none!important;max-height:none!important;width:auto;padding:0}
+.leaflet-zoom-animated{transform-origin:0 0}
+.leaflet-zoom-anim .leaflet-zoom-animated{transition:transform .25s cubic-bezier(0,0,.25,1)}
+.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{transition:none}
+.leaflet-zoom-anim .leaflet-zoom-hide{visibility:hidden}
+.leaflet-pane{z-index:400}.leaflet-tile-pane{z-index:200}.leaflet-overlay-pane{z-index:400}.leaflet-marker-pane{z-index:600}
+.leaflet-map-pane canvas{z-index:100}.leaflet-map-pane svg{z-index:200}
+.leaflet-grab{cursor:grab}.leaflet-dragging .leaflet-grab{cursor:grabbing}
+.leaflet-interactive{cursor:pointer}
+.leaflet-control{position:relative;z-index:800;pointer-events:auto;float:left;clear:both}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+.leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
+.leaflet-right .leaflet-control{float:right}
+.leaflet-top .leaflet-control{margin-top:10px}.leaflet-left .leaflet-control{margin-left:10px}
+.leaflet-control-zoom{border-radius:12px;overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--line)}
+.leaflet-control-zoom a{display:block;width:34px;height:34px;line-height:32px;text-align:center;text-decoration:none;font-size:20px;background:var(--surface);color:var(--fg)}
+.leaflet-control-zoom a+a{border-top:1px solid var(--line)}
+.leaflet-control-zoom a:hover{background:var(--surface-2)}
+.leaflet-control-zoom a.leaflet-disabled{color:var(--muted);opacity:.5;cursor:default}
+.leaflet-control-attribution{background:color-mix(in srgb,var(--surface) 80%,transparent);color:var(--muted);padding:1px 6px;font-size:10.5px;border-top-left-radius:8px}
+.leaflet-control-attribution a{color:inherit}
+
+/* dünya küresi: bilerek her temada koyu "uzay" görünümü */
+.space{--sp-fg:#E8EEF7;--sp-muted:#9AA9C0;--sp-line:rgba(255,255,255,.12);color:var(--sp-fg);background:radial-gradient(120% 90% at 50% 40%,#10224A 0%,#071026 55%,#030713 100%);border-radius:22px;box-shadow:var(--shadow);padding:20px 22px;min-width:0;position:relative;overflow:hidden}
+.space h2 svg{color:#7FB2FF}
+.space .when{color:var(--sp-muted)}
+.space .seg{background:rgba(255,255,255,.07);border:1px solid var(--sp-line)}
+.space .seg button{color:var(--sp-muted)}
+.space .seg button[aria-pressed="true"]{background:#E8EEF7;color:#0A1328;box-shadow:none}
+.globe-box{position:relative;height:460px;margin-top:4px;touch-action:none;cursor:grab}
+.globe-box.drag{cursor:grabbing}
+.globe-box canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.gstars{position:absolute;inset:0;pointer-events:none;opacity:.7;background-image:radial-gradient(1px 1px at 12% 18%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 78% 12%,#fff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 88% 64%,#cfe0ff 50%,transparent 51%),radial-gradient(1px 1px at 22% 78%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 52% 6%,#fff 50%,transparent 51%),radial-gradient(1.5px 1.5px at 6% 52%,#cfe0ff 50%,transparent 51%),radial-gradient(1px 1px at 64% 92%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 93% 30%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 35% 30%,#fff 50%,transparent 51%),radial-gradient(1px 1px at 70% 45%,#fff 50%,transparent 51%)}
+.gtip{position:absolute;pointer-events:none;background:rgba(232,238,247,.95);color:#0A1328;border-radius:10px;padding:6px 10px;font-size:12.5px;white-space:nowrap;transform:translate(-50%,-130%);z-index:2}
+.gtip b{font-weight:700}
+.gmsg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--sp-muted);padding:20px}
+.gfoot{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;margin-top:8px;font-size:12.5px;color:var(--sp-muted)}
+.gscale{display:flex;flex-direction:column;gap:4px;flex:1;min-width:220px;max-width:420px}
+.gscale i{display:block;height:8px;border-radius:9px}
+.gscale div{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.gstate{margin-left:auto;display:inline-flex;align-items:center;gap:6px}
+.gstate::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--gs,#4CC38A)}
+@media (max-width:560px){.globe-box{height:340px}}
+
+/* 10 günlük tahmin */
+.d10{display:flex;flex-direction:column}
+.d10-r{display:grid;grid-template-columns:minmax(76px,120px) 34px 52px 40px minmax(60px,1fr) 40px;align-items:center;gap:12px;padding:10px 4px;border-top:1px solid var(--line);min-width:0}
+.d10-r:first-child{border-top:0}
+.d10-d{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.d10-d b{font-weight:600}
+.d10-d small{color:var(--muted);font-size:12.5px}
+.d10-p{font-size:13px;color:var(--accent);font-weight:600;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums}
+.d10-p.dry{color:transparent}
+.d10-lo,.d10-hi{font-family:var(--display);font-weight:600;font-size:17px;font-variant-numeric:tabular-nums}
+.d10-lo{color:var(--muted);text-align:right}
+.d10-bar{position:relative;height:6px;border-radius:9px;background:var(--surface-2)}
+.d10-bar i{position:absolute;top:0;bottom:0;border-radius:9px}
+.d10-bar b{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--surface);border:3px solid var(--fg)}
+@media (max-width:560px){.d10-r{grid-template-columns:62px 28px 40px 34px minmax(40px,1fr) 34px;gap:8px}.d10-d small{display:none}.d10-lo,.d10-hi{font-size:15.5px}}
+
+/* konum düğmesi */
+.locbtn{display:inline-flex;align-items:center;gap:7px;height:40px;padding:0 15px 0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:500;color:var(--fg)}
+.locbtn svg{color:var(--accent);flex:none}
+.locbtn:hover{border-color:var(--accent)}
+.locbtn.busy svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* polen */
+.pol-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.pol-risk{display:inline-flex;align-items:center;gap:7px;font-weight:600;padding:5px 12px 5px 10px;border-radius:999px;background:color-mix(in srgb,var(--pc) 15%,var(--surface));color:var(--fg)}
+.pol-risk::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--pc)}
+.pol-sub{color:var(--muted);font-size:14px}
+.pol-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.pol{background:var(--surface-2);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.pol b{font-weight:600;font-size:14px}
+.pol span{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pol-m{display:grid;grid-template-columns:repeat(4,1fr);gap:3px}
+.pol-m i{height:5px;border-radius:9px;background:var(--line)}
+.pol-na{color:var(--muted);font-size:14px;padding:4px 0}
+.pol-foot{margin-top:10px;font-size:12.5px;color:var(--muted)}
+@media (max-width:900px){.pol-grid{grid-template-columns:repeat(3,1fr)}}
+@media (max-width:560px){.pol-grid{grid-template-columns:repeat(2,1fr)}}
+
+/* mikro animasyonlar ve klavye */
+@keyframes rise{from{opacity:.35;transform:translateY(8px)}to{opacity:1;transform:none}}
+.rise{animation:rise .45s cubic-bezier(.2,.7,.2,1)}
+@media (prefers-reduced-motion:reduce){.rise{animation:none}}
+.skip{position:absolute;left:16px;top:-60px;z-index:4000;background:var(--accent);color:var(--surface);padding:10px 16px;border-radius:12px;font-weight:600;text-decoration:none}
+.skip:focus{top:calc(10px + env(safe-area-inset-top,0px))}
+.globe-box:focus-visible{outline:2px solid #7FB2FF;outline-offset:-2px;border-radius:16px}
+.keys{display:block;margin-top:4px}
+kbd{font-family:var(--body);font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;background:var(--surface)}
+
+/* paylaşım penceresi */
+.seg button svg{display:block}
+.modal{position:fixed;inset:0;z-index:3000;background:rgba(5,10,22,.62);display:grid;place-items:center;padding:16px}
+.mbox{background:var(--surface);color:var(--fg);border-radius:22px;box-shadow:var(--shadow);padding:18px;width:min(460px,100%);max-height:calc(100% - 8px);display:flex;flex-direction:column;gap:12px;overflow:auto}
+.mhead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.mhead h2{font-size:18px}
+.xbtn{border:0;background:var(--surface-2);border-radius:999px;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;color:var(--fg)}
+.mprev{display:grid;place-items:center;background:var(--surface-2);border-radius:14px;padding:12px;min-height:220px}
+.mprev img{max-height:min(54vh,560px);max-width:100%;border-radius:12px;box-shadow:0 10px 30px -12px rgba(0,0,0,.5)}
+.mprev span{color:var(--muted);font-size:14px}
+.mact{display:flex;gap:8px;flex-wrap:wrap}
+.btn{flex:1;min-width:120px;display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;border-radius:999px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:600;font-size:14.5px;color:var(--fg)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--surface)}
+.btn:disabled{opacity:.5;cursor:default}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:3100;box-shadow:var(--shadow)}
+
+footer{color:var(--muted);font-size:12.5px;text-align:center;padding-top:4px}
+footer a{color:inherit}
+
+@media (max-width:900px){.metrics{grid-template-columns:repeat(3,1fr)}.duo{grid-template-columns:1fr}}
+@media (max-width:560px){
+  .wrap{padding-inline:16px}
+  .metrics{grid-template-columns:repeat(2,1fr)}
+  .hero{min-height:300px}.hero-txt{padding:22px;max-width:80%}
+  .pick{width:100%}.field{flex:1 1 130px}.field select,.field input{width:100%;max-width:none}
+  .rows b{font-size:17px}.chips{margin-left:0}
+  .phases div span{display:none}
+  #map{height:320px}
+  .rscale{width:100%}
+}
+@media (prefers-reduced-motion:reduce){.arrow{transition:none}}
+</style>
+</head>
+<body>
+
+<a class="skip" href="#hero" data-t="skip"></a>
+<div class="wrap">
+  <header class="bar">
+    <div class="brand"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3l1.7 1.7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/></svg>HavaDuru</div>
+    <div class="prefs">
+      <div class="seg" role="group" id="uT" data-ta="tempUnit"><button type="button" data-v="c">°C</button><button type="button" data-v="f">°F</button></div>
+      <div class="seg" role="group" id="uW" data-ta="windUnit"><button type="button" data-v="kmh" id="kmhBtn">km/sa</button><button type="button" data-v="mph">mph</button></div>
+      <div class="seg" role="group" id="uTh" data-ta="theme">
+        <button type="button" data-v="auto" data-ta="thAuto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor"/></svg></button>
+        <button type="button" data-v="light" data-ta="thLight"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></svg></button>
+        <button type="button" data-v="dark" data-ta="thDark"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg></button>
+      </div>
+      <div class="seg" role="group" id="uL" data-ta="language"><button type="button" data-v="tr">TR</button><button type="button" data-v="en">EN</button></div>
+    </div>
+    <div class="pick">
+      <label class="field"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg>
+        <select id="country" data-ta="country"></select></label>
+      <label class="field"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>
+        <select id="city" data-ta="city"></select></label>
+      <div class="field"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        <input id="q" type="search" autocomplete="off" data-tp="search" data-ta="search">
+        <div class="results" id="results" hidden></div></div>
+      <button type="button" class="locbtn" id="locBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg><span data-t="myLoc"></span></button>
+    </div>
+  </header>
+
+  <div class="note" id="note" hidden>
+    <span><b data-t="noteB"></b> <span data-t="noteT"></span></span>
+    <div class="chips" id="chips"></div>
+  </div>
+
+  <section class="favs">
+    <div class="favs-h"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3l2.6 5.6 6 .7-4.5 4.2 1.2 6L12 16.5l-5.3 3 1.2-6L3.4 9.3l6-.7z"/></svg><span data-t="favs"></span><span class="favs-msg" id="favMsg" aria-live="polite"></span></div>
+    <div class="fav-row" id="favRow"></div>
+  </section>
+
+  <div class="tips">
+  <section class="act" aria-live="polite">
+    <div class="act-ic" id="actIc"></div>
+    <div class="act-b"><div class="act-l" data-t="actL"></div><div class="act-t" id="actT">—</div><div class="act-s" id="actS"></div></div>
+  </section>
+  <section class="act fact" aria-live="polite">
+    <div class="act-ic" style="--tint:#FACC15"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 9h1.6M19.9 9h1.6M4.6 3.4l1.1 1.1M19.4 3.4l-1.1 1.1" stroke="#F59E0B" stroke-width="1.4" stroke-linecap="round"/><path d="M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.1.9 1.8v.5h6v-.5c0-.7.3-1.3.9-1.8A6.5 6.5 0 0 0 12 2.5z" fill="#FACC15"/><path d="M9.5 6.6a3.6 3.6 0 0 1 2.5-1.1" stroke="#FEF9C3" stroke-width="1.4" stroke-linecap="round" fill="none"/><rect x="9" y="17" width="6" height="2" rx=".6" fill="#94A3B8"/><rect x="9.6" y="19.4" width="4.8" height="1.8" rx=".6" fill="#64748B"/></svg></div>
+    <div class="act-b"><div class="act-l" data-t="factL"></div><div class="act-t" id="factT">—</div>
+      <button type="button" class="fact-more" id="factMore"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg><span data-t="factMore"></span></button></div>
+  </section>
+  </div>
+
+  <section class="hero" id="hero" tabindex="-1" aria-live="polite">
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="hero-txt">
+      <div><div class="place"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22s7.5-6.6 7.5-12.3A7.5 7.5 0 0 0 4.5 9.7C4.5 15.4 12 22 12 22zm0-9.3a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/></svg><span id="place">—</span>
+          <button type="button" class="star" id="favBtn" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.2 1.2 6L12 16.5l-5.3 3 1.2-6L3.4 9.3l6-.7z"/></svg></button>
+          <button type="button" class="star" id="shareBtn" data-ta="shareT"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg></button></div>
+        <div class="when" id="when">…</div></div>
+      <div class="temp-row">
+        <div class="temp num"><span id="temp">–</span><sup id="tUnit">°C</sup></div>
+        <div class="cond"><strong id="cond">—</strong><span id="feels"></span><span class="diff" id="diff" hidden></span></div>
+      </div>
+      <div class="hilo" id="hilo"></div>
+    </div>
+  </section>
+
+  <section class="metrics" id="metrics"></section>
+
+  <section class="panel" id="pollen">
+    <div class="p-head"><h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="9" r="2.4"/><path d="M12 6.6a2.6 2.6 0 1 1 2.3-3.9M14.3 7.4a2.6 2.6 0 1 1 1.1 4.3M13.4 11.2a2.6 2.6 0 1 1-2.8 0M9.7 11.7a2.6 2.6 0 1 1 0-4.6M9.7 2.7A2.6 2.6 0 0 1 12 6.6M12 11.4V21M12 17c-2-2.5-5-3-7-2.5M12 19c2-2 4.5-2.4 6.5-2"/></svg><span data-t="pollenT"></span></h2></div>
+    <div id="polBody"></div>
+  </section>
+
+  <section class="panel">
+    <div class="p-head">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-8 4 5"/></svg><span data-t="chartT"></span></h2>
+      <div class="legend" id="legend" hidden><span><i style="background:var(--sun)"></i><span data-t="hi"></span></span><span><i style="background:var(--accent)"></i><span data-t="lo"></span></span></div>
+      <div class="seg" role="group"><button type="button" id="mH" aria-pressed="true" data-t="h24"></button><button type="button" id="mD" aria-pressed="false" data-t="d7"></button></div>
+    </div>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <section class="panel">
+    <div class="p-head"><h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span data-t="d10"></span></h2><span class="when" data-t="d10s"></span></div>
+    <div class="d10" id="d10"></div>
+  </section>
+
+  <div class="duo">
+    <section class="panel">
+      <div class="p-head"><h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 18h18M6.5 18a5.5 5.5 0 0 1 11 0M12 6V3.5M5 9.5 3.5 8M19 9.5 20.5 8"/></svg><span data-t="sunT"></span></h2><span class="when" id="sunState"></span></div>
+      <div id="sunArc"></div>
+      <div class="rows" id="sunRows"></div>
+    </section>
+    <section class="panel">
+      <div class="p-head"><h2><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg><span data-t="moonT"></span></h2></div>
+      <div class="moon-main" id="moonMain"></div>
+      <div class="phases" id="phases"></div>
+    </section>
+  </div>
+
+  <section class="space">
+    <div class="p-head">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.2 3 14.8 0 18M12 3c-3 3.2-3 14.8 0 18"/></svg><span data-t="globeT"></span></h2>
+      <div class="seg" role="group" id="gLayer" data-ta="globeLayer"><button type="button" data-v="temp" data-t="gTemp"></button><button type="button" data-v="wind" data-t="gWind"></button><button type="button" data-v="rain" data-t="gRain"></button><button type="button" data-v="aqi" data-t="gAqi"></button></div>
+    </div>
+    <div class="globe-box" id="globeBox" tabindex="0" role="img" data-ta="globeKeys"><div class="gstars"></div><canvas id="globe" aria-hidden="true"></canvas><div class="gtip" id="gtip" hidden></div><div class="gmsg" id="gmsg" hidden></div></div>
+    <div class="gfoot">
+      <div class="gscale"><span id="gTitle"></span><i id="gBar"></i><div id="gTicks"></div></div>
+      <span data-t="globeHint"></span>
+      <span class="gstate" id="gState"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="p-head">
+      <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6.5-6.5"/></svg><span data-t="radarT"></span></h2>
+      <span class="when" data-t="radarSub"></span>
+    </div>
+    <div class="map-wrap"><div id="map"></div><div class="map-msg" id="mapMsg" hidden></div></div>
+    <div class="rctl">
+      <button type="button" class="playbtn" id="play" disabled></button>
+      <input type="range" id="rslider" min="0" max="0" value="0" disabled data-ta="radarTime">
+      <span class="rtime num" id="rtime">--:--</span>
+      <span class="rscale"><span data-t="light"></span><i></i><span data-t="heavy"></span></span>
+    </div>
+  </section>
+
+  <div class="modal" id="modal" hidden>
+    <div class="mbox" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <div class="mhead"><h2 id="mTitle" data-t="shareT"></h2><button type="button" class="xbtn" id="mClose" data-ta="close"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="seg" role="group" id="mFmt" style="align-self:flex-start"><button type="button" data-v="story" data-t="story"></button><button type="button" data-v="square" data-t="square"></button></div>
+      <div class="mprev" id="mPrev"><span data-t="making"></span></div>
+      <div class="mact"><button type="button" class="btn pri" id="mSave"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7.5 10.5 12 15l4.5-4.5M5 20h14"/></svg><span data-t="download"></span></button>
+        <button type="button" class="btn" id="mShare" hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg><span data-t="shareBtn"></span></button></div>
+    </div>
+  </div>
+  <div class="toast" id="toast" hidden></div>
+
+  <footer><span data-t="data"></span>: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> · <span data-t="radarBy"></span>: <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a> · <span data-t="moonNote"></span><span class="keys" id="keys"></span></footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const PLACES=[
+ ["Türkiye","Europe/Istanbul",[["İstanbul",41.01,28.98],["Ankara",39.93,32.86],["İzmir",38.42,27.14],["Antalya",36.90,30.70],["Bursa",40.19,29.06],["Trabzon",41.00,39.72],["Diyarbakır",37.91,40.24],["Erzurum",39.90,41.27],
+  ["Adana",37.00,35.32],["Gaziantep",37.07,37.38],["Konya",37.87,32.48],["Kayseri",38.72,35.49],["Mersin",36.81,34.64],["Eskişehir",39.78,30.52],["Samsun",41.29,36.33],["Denizli",37.77,29.09],["Şanlıurfa",37.16,38.80],["Malatya",38.35,38.31],
+  ["Kahramanmaraş",37.58,36.93],["Van",38.49,43.38],["Sakarya",40.78,30.40],["Kocaeli",40.77,29.92],["Manisa",38.61,27.43],["Balıkesir",39.65,27.89],["Aydın",37.85,27.85],["Muğla",37.22,28.36],["Tekirdağ",40.98,27.51],["Hatay",36.20,36.16],
+  ["Mardin",37.31,40.74],["Sivas",39.75,37.02],["Elazığ",38.67,39.22],["Edirne",41.68,26.56],["Çanakkale",40.15,26.41],["Rize",41.02,40.52],["Ordu",40.98,37.88],["Kars",40.60,43.10],["Afyonkarahisar",38.76,30.54],["Zonguldak",41.45,31.79]]],
+ ["Almanya","Europe/Berlin",[["Berlin",52.52,13.40],["Münih",48.14,11.58],["Hamburg",53.55,9.99],["Frankfurt",50.11,8.68]]],
+ ["Birleşik Krallık","Europe/London",[["Londra",51.51,-0.13],["Manchester",53.48,-2.24],["Edinburgh",55.95,-3.19]]],
+ ["Fransa","Europe/Paris",[["Paris",48.86,2.35],["Lyon",45.76,4.84],["Marsilya",43.30,5.37]]],
+ ["İtalya","Europe/Rome",[["Roma",41.90,12.50],["Milano",45.46,9.19],["Napoli",40.85,14.27]]],
+ ["İspanya","Europe/Madrid",[["Madrid",40.42,-3.70],["Barselona",41.39,2.17],["Sevilla",37.39,-5.99]]],
+ ["Hollanda","Europe/Amsterdam",[["Amsterdam",52.37,4.90],["Rotterdam",51.92,4.48]]],
+ ["Azerbaycan","Asia/Baku",[["Bakü",40.41,49.87],["Gence",40.68,46.36]]],
+ ["Rusya","Europe/Moscow",[["Moskova",55.76,37.62],["St. Petersburg",59.93,30.34]]],
+ ["BAE","Asia/Dubai",[["Dubai",25.20,55.27],["Abu Dabi",24.45,54.38]]],
+ ["Mısır","Africa/Cairo",[["Kahire",30.04,31.24],["İskenderiye",31.20,29.92]]],
+ ["Japonya","Asia/Tokyo",[["Tokyo",35.68,139.69],["Osaka",34.69,135.50],["Sapporo",43.06,141.35]]],
+ ["Güney Kore","Asia/Seoul",[["Seul",37.57,126.98],["Busan",35.18,129.08]]],
+ ["ABD","America/New_York",[["New York",40.71,-74.01],["Miami",25.76,-80.19],["Chicago",41.88,-87.63,"America/Chicago"],["Los Angeles",34.05,-118.24,"America/Los_Angeles"]]],
+ ["Brezilya","America/Sao_Paulo",[["São Paulo",-23.55,-46.63],["Rio de Janeiro",-22.91,-43.17]]],
+ ["Avustralya","Australia/Sydney",[["Sidney",-33.87,151.21],["Melbourne",-37.81,144.96]]]
+];
+const COUNTRY_EN={"Türkiye":"Türkiye","Almanya":"Germany","Birleşik Krallık":"United Kingdom","Fransa":"France","İtalya":"Italy","İspanya":"Spain","Hollanda":"Netherlands","Azerbaycan":"Azerbaijan","Rusya":"Russia","BAE":"UAE","Mısır":"Egypt","Japonya":"Japan","Güney Kore":"South Korea","ABD":"USA","Brezilya":"Brazil","Avustralya":"Australia"};
+const CITY_EN={"İstanbul":"Istanbul","İzmir":"Izmir","Münih":"Munich","Londra":"London","Marsilya":"Marseille","Roma":"Rome","Milano":"Milan","Napoli":"Naples","Barselona":"Barcelona","Bakü":"Baku","Gence":"Ganja","Moskova":"Moscow","Abu Dabi":"Abu Dhabi","Kahire":"Cairo","İskenderiye":"Alexandria","Seul":"Seoul","Sidney":"Sydney"};
+const ALL=[];PLACES.forEach(([c,tz,cs])=>cs.forEach(([n,lat,lon,t])=>ALL.push({name:n,country:c,lat,lon,tz:t||tz})));
+
+/* ---------- dil ---------- */
+const I18N={
+ tr:{tempUnit:'Sıcaklık birimi',windUnit:'Rüzgar birimi',language:'Dil',country:'Ülke',city:'Şehir',search:'Şehir ara…',noResult:'Sonuç bulunamadı',searchRes:'Arama sonucu',
+  noteB:'Örnek veri gösteriliyor.',noteT:"Open-Meteo'ya ulaşılamadı; internet bağlantını kontrol edip sayfayı yenile.",
+  favs:'Favoriler',favAdd:'Favorilere ekle',favDel:'Favorilerden çıkar',favFull:'En fazla 5 favori ekleyebilirsin',favEmpty:'Şehrin yanındaki yıldıza dokunarak favori ekle.',
+  actL:'Bugün ne yapılır?',feels:'Hissedilen',hi:'En yüksek',lo:'En düşük',
+  warmer:n=>`Dünden ${n}° daha sıcak`,colder:n=>`Dünden ${n}° daha soğuk`,same:'Dünle aynı sıcaklık',
+  hum:'Nem',aq:'Hava kalitesi',wind:'Rüzgar',pres:'Basınç',uv:'UV indeksi',pop:'Yağış ihtimali',noData:'Veri yok',
+  aqN:['İyi','Makul','Orta','Kötü','Çok kötü'],beau:['Sakin','Hafif esinti','Orta şiddette','Kuvvetli','Fırtına'],dirs:['K','KD','D','GD','G','GB','B','KB'],
+  presN:['Alçak basınç','Normal','Yüksek basınç'],uvN:['Düşük','Orta','Yüksek','Çok yüksek','Aşırı'],kmh:'km/sa',
+  chartT:'Sıcaklık değişimi',h24:'24 saat',d7:'7 gün',d10:'10 günlük tahmin',d10s:'En düşük ve en yüksek sıcaklık',today:'Bugün',now:'Şimdi',rain:'yağış',
+  sunT:'Güneş',sunsetIn:d=>`Batışa ${d}`,sunriseIn:d=>`Doğuşa ${d}`,sunGone:'Güneş battı',horizon:'ufuk',sunrise:'Gün doğumu',sunset:'Gün batımı',dayLen:'Gün uzunluğu',dur:(h,m)=>`${h} sa ${m} dk`,
+  moonT:'Ay evresi',moonN:['Yeni Ay','Büyüyen Hilal','İlk Dördün','Büyüyen Şişkin Ay','Dolunay','Küçülen Şişkin Ay','Son Dördün','Küçülen Hilal'],moonS:['Yeni','Hilal','İlk D.','Şişkin','Dolunay','Şişkin','Son D.','Hilal'],
+  lit:n=>`%${n} aydınlık`,age:n=>`${n} günlük`,nextFull:'Sonraki dolunay',nextNew:'Sonraki yeni ay',
+  radarT:'Yağış radarı',radarSub:'Son 2 saat · 20 dakikada bir',radarTime:'Radar zamanı',light:'Hafif',heavy:'Kuvvetli',play:'Oynat',pause:'Durdur',
+  mapOffB:'Radar haritası yüklenemedi',mapOffT:'Hava verisine ulaşılamadığı için radar da gösterilemiyor. İnternet bağlantını kontrol edip sayfayı yenile.',
+  mapErrB:'Radar verisine ulaşılamadı',mapErrT:'Biraz sonra sayfayı yenileyip tekrar dene.',
+  data:'Hava verisi',radarBy:'Radar',moonNote:'Ay evresi cihazda hesaplanır',factL:'Biliyor muydun?',myLoc:'Konumum',locNo:'Tarayıcın konum özelliğini desteklemiyor',locDenied:'Konum izni verilmedi',locFail:'Konum alınamadı, biraz sonra tekrar dene',
+  pollenT:'Polen ve alerji',pollenRisk:'Alerji riski',pollenLv:['Yok','Düşük','Orta','Yüksek','Çok yüksek'],pollenN:{alder:'Kızılağaç',birch:'Huş',olive:'Zeytin',grass:'Çimen',mugwort:'Pelin otu',ragweed:'Ambrosia'},
+  pollenNone:'Şu an havada kayda değer polen yok.',pollenTop:(n,l)=>`En yüksek: ${n} (${l.toLocaleLowerCase('tr')})`,pollenNA:'Polen verisi yalnızca Avrupa için var; bu konum için gösterilemiyor.',pollenUnit:'tane/m³',
+  pollenFoot:'Seviyeler ABD Ulusal Alerji Bürosu (NAB) eşiklerine göre: ağaç, çimen ve ot polenleri için ayrı sınırlar.',
+  skip:'İçeriğe geç',keys:'Klavye: <kbd>/</kbd> ara · <kbd>K</kbd> konum · <kbd>F</kbd> favori · <kbd>P</kbd> paylaş · küreyi ok tuşlarıyla döndür',globeKeys:'Dünya hava haritası, ok tuşlarıyla döndürülebilir',factMore:'Başka bilgi',theme:'Tema',thAuto:'Cihazın teması',thLight:'Açık tema',thDark:'Koyu tema',shareT:'Hava kartını paylaş',story:'Hikaye 9:16',square:'Kare 1:1',making:'Kart hazırlanıyor…',download:'İndir',shareBtn:'Paylaş',close:'Kapat',saved:'Görsel kaydedildi',saveFail:'Görsel kaydedilemedi',cardAct:'BUGÜN NE YAPILIR?',cardHi:'En yüksek',cardLo:'en düşük',
+  globeT:'Dünya hava haritası',globeLayer:'Harita katmanı',gTemp:'Sıcaklık',gWind:'Rüzgar',gRain:'Yağış',gAqi:'Hava kalitesi',globeHint:'Sürükleyerek döndür, üzerine gelince değeri gör',
+  gTitles:{temp:'Sıcaklık',wind:'Rüzgar hızı',rain:'Bugünkü yağış (mm)',aqi:'Hava kalitesi (Avrupa AQI)'},gLive:'Canlı veri',gSample:'Örnek veri',gLoading:'Yükleniyor…',gErr:'Veri alınamadı, örnek gösteriliyor',gNoGL:'Tarayıcın 3B küreyi gösteremiyor (WebGL kapalı).',
+  kinds:{clear:'Açık',partly:'Parçalı',cloudy:'Kapalı',rain:'Yağmur',storm:'Fırtına',snow:'Kar',fog:'Sis'},
+  days:['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'],daysL:['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'],
+  mon:['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'],
+  date:(dl,d,m)=>`${dl}, ${d} ${m}`,dm:(d,m)=>`${d} ${m}`,
+  codes:{0:'Açık',1:'Çoğunlukla açık',2:'Parçalı bulutlu',3:'Kapalı',45:'Sisli',48:'Kırağılı sis',51:'Hafif çisenti',53:'Çisenti',55:'Yoğun çisenti',56:'Dondurucu çisenti',57:'Dondurucu çisenti',61:'Hafif yağmur',63:'Yağmurlu',65:'Kuvvetli yağmur',66:'Dondurucu yağmur',67:'Dondurucu yağmur',71:'Hafif kar',73:'Kar yağışlı',75:'Yoğun kar',77:'Kar taneleri',80:'Hafif sağanak',81:'Sağanak yağışlı',82:'Şiddetli sağanak',85:'Kar sağanağı',86:'Kar sağanağı',95:'Gök gürültülü fırtına',96:'Dolulu fırtına',99:'Dolulu fırtına'},
+  act:{storm:['Dışarısı fırtınalı, bugün evde kalma günü','Battaniyeni al, pencereden şimşekleri izle; bir dizi maratonu da fena olmaz.'],
+   snow:['Sıcak çikolata eşliğinde film izleme havası','Önce dışarıda biraz kartopu, sonra battaniye altında film.'],
+   rainW:['Şemsiyeni al, yağmurda kısa bir yürüyüşe çık','Sonrasında cam kenarında bir kahve çok iyi gider.'],
+   rainC:['Kahveni al, cam kenarında kitap okuma havası','Yağmur sesi eşliğinde müzik ya da film de güzel olur.'],
+   fog:['Sisli bir gün; sıcak bir çay ve sakin bir mola','Dışarı çıkacaksan dikkatli ol, görüş mesafesi düşük.'],
+   t35:['Havuz, deniz veya okyanusa gir bence :)','Çok sıcak; bol su iç, öğle saatlerinde gölgede kal.'],
+   t30:['Dondurma ve gölgede serinleme zamanı','Sporu akşam serinliğine bırak, güneş kremini unutma.'],
+   stars:['Gökyüzü açık, yıldızları izlemeye ne dersin?','Şehir ışıklarından biraz uzaklaşırsan daha da güzel görünür.'],
+   t25:['Basketbol oynamaya ne dersin?','Hava tam kıvamında; bisiklet ya da sahil yürüyüşü de olur.'],
+   t18:['Yürüyüş, bisiklet ya da piknik için harika bir hava','Parka çık, arkadaşlarını da çağır.'],
+   t10:['Hafif bir ceketle koşu ya da tempolu yürüyüş','Serin hava spor için ideal; dönüşte sıcak bir içecek.'],
+   t0:['Hava soğuk; müze, sinema ya da sıcak bir kafe','Dışarı çıkarken montunu ve atkını al.'],
+   frz:['Dondurucu soğuk, sıkı giyin','Evde sıcak bir çorba ve film en güvenli plan.']}},
+ en:{tempUnit:'Temperature unit',windUnit:'Wind unit',language:'Language',country:'Country',city:'City',search:'Search city…',noResult:'No results',searchRes:'Search result',
+  noteB:'Showing sample data.',noteT:"Couldn't reach Open-Meteo; check your connection and refresh the page.",
+  favs:'Favorites',favAdd:'Add to favorites',favDel:'Remove from favorites',favFull:'You can add up to 5 favorites',favEmpty:'Tap the star next to the city name to add a favorite.',
+  actL:'What to do today?',feels:'Feels like',hi:'High',lo:'Low',
+  warmer:n=>`${n}° warmer than yesterday`,colder:n=>`${n}° colder than yesterday`,same:'Same as yesterday',
+  hum:'Humidity',aq:'Air quality',wind:'Wind',pres:'Pressure',uv:'UV index',pop:'Chance of rain',noData:'No data',
+  aqN:['Good','Fair','Moderate','Poor','Very poor'],beau:['Calm','Light breeze','Moderate','Strong','Gale'],dirs:['N','NE','E','SE','S','SW','W','NW'],
+  presN:['Low pressure','Normal','High pressure'],uvN:['Low','Moderate','High','Very high','Extreme'],kmh:'km/h',
+  chartT:'Temperature trend',h24:'24 hours',d7:'7 days',d10:'10-day forecast',d10s:'Daily low and high',today:'Today',now:'Now',rain:'rain',
+  sunT:'Sun',sunsetIn:d=>`Sunset in ${d}`,sunriseIn:d=>`Sunrise in ${d}`,sunGone:'The sun has set',horizon:'horizon',sunrise:'Sunrise',sunset:'Sunset',dayLen:'Day length',dur:(h,m)=>`${h}h ${m}m`,
+  moonT:'Moon phase',moonN:['New Moon','Waxing Crescent','First Quarter','Waxing Gibbous','Full Moon','Waning Gibbous','Last Quarter','Waning Crescent'],moonS:['New','Cresc.','1st Q.','Gibb.','Full','Gibb.','Last Q.','Cresc.'],
+  lit:n=>`${n}% illuminated`,age:n=>`${n} days old`,nextFull:'Next full moon',nextNew:'Next new moon',
+  radarT:'Rain radar',radarSub:'Last 2 hours · every 20 minutes',radarTime:'Radar time',light:'Light',heavy:'Heavy',play:'Play',pause:'Pause',
+  mapOffB:"Couldn't load the radar map",mapOffT:"Weather data is unreachable, so the radar can't be shown either. Check your connection and refresh the page.",
+  mapErrB:"Couldn't reach radar data",mapErrT:'Refresh the page in a moment and try again.',
+  data:'Weather data',radarBy:'Radar',moonNote:'Moon phase is calculated on your device',factL:'Did you know?',myLoc:'My location',locNo:"Your browser doesn't support location",locDenied:'Location permission was denied',locFail:"Couldn't get your location, try again in a moment",
+  pollenT:'Pollen and allergy',pollenRisk:'Allergy risk',pollenLv:['None','Low','Moderate','High','Very high'],pollenN:{alder:'Alder',birch:'Birch',olive:'Olive',grass:'Grass',mugwort:'Mugwort',ragweed:'Ragweed'},
+  pollenNone:'No significant pollen in the air right now.',pollenTop:(n,l)=>`Highest: ${n} (${l.toLowerCase()})`,pollenNA:'Pollen data is only available for Europe, so it cannot be shown for this location.',pollenUnit:'grains/m³',
+  pollenFoot:'Levels follow the US National Allergy Bureau (NAB) thresholds, with separate limits for tree, grass and weed pollen.',
+  skip:'Skip to content',keys:'Keys: <kbd>/</kbd> search · <kbd>K</kbd> location · <kbd>F</kbd> favorite · <kbd>P</kbd> share · rotate the globe with arrow keys',globeKeys:'World weather map, rotate with the arrow keys',factMore:'Another fact',theme:'Theme',thAuto:'Device theme',thLight:'Light theme',thDark:'Dark theme',shareT:'Share weather card',story:'Story 9:16',square:'Square 1:1',making:'Making your card…',download:'Download',shareBtn:'Share',close:'Close',saved:'Image saved',saveFail:"Couldn't save the image",cardAct:'WHAT TO DO TODAY?',cardHi:'High',cardLo:'low',
+  globeT:'World weather map',globeLayer:'Map layer',gTemp:'Temperature',gWind:'Wind',gRain:'Rain',gAqi:'Air quality',globeHint:'Drag to rotate, hover to read a value',
+  gTitles:{temp:'Temperature',wind:'Wind speed',rain:"Today's rain (mm)",aqi:'Air quality (European AQI)'},gLive:'Live data',gSample:'Sample data',gLoading:'Loading…',gErr:"Couldn't load data, showing a sample",gNoGL:"Your browser can't show the 3D globe (WebGL is off).",
+  kinds:{clear:'Clear',partly:'Partly',cloudy:'Cloudy',rain:'Rain',storm:'Storm',snow:'Snow',fog:'Fog'},
+  days:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],daysL:['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],
+  mon:['January','February','March','April','May','June','July','August','September','October','November','December'],
+  date:(dl,d,m)=>`${dl}, ${m} ${d}`,dm:(d,m)=>`${m} ${d}`,
+  codes:{0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Rime fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',56:'Freezing drizzle',57:'Freezing drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',66:'Freezing rain',67:'Freezing rain',71:'Light snow',73:'Snow',75:'Heavy snow',77:'Snow grains',80:'Light showers',81:'Showers',82:'Violent showers',85:'Snow showers',86:'Snow showers',95:'Thunderstorm',96:'Thunderstorm with hail',99:'Thunderstorm with hail'},
+  act:{storm:['Stormy outside, a stay-at-home day','Grab a blanket and watch the lightning; a series marathon works too.'],
+   snow:['Hot chocolate and movie weather','A bit of snowball fun first, then a film under a blanket.'],
+   rainW:['Grab an umbrella and take a short walk in the rain','A coffee by the window afterwards hits the spot.'],
+   rainC:['Coffee and a book by the window','Music or a film with the sound of rain works too.'],
+   fog:['A foggy day; a hot tea and a quiet break','Take care if you go out, visibility is low.'],
+   t35:['Jump in a pool, the sea or the ocean :)','Very hot; drink plenty of water and stay in the shade at midday.'],
+   t30:['Time for ice cream and some shade','Save sports for the cooler evening and wear sunscreen.'],
+   stars:['Clear skies, how about some stargazing?','It looks even better away from city lights.'],
+   t25:['How about a game of basketball?','Perfect weather; cycling or a beach walk work too.'],
+   t18:['Great weather for a walk, a bike ride or a picnic','Head to the park and invite your friends.'],
+   t10:['A run or brisk walk in a light jacket','Cool air is ideal for sport; a hot drink on the way back.'],
+   t0:['Cold out; a museum, cinema or a cosy café','Take your coat and scarf when you go out.'],
+   frz:['Freezing cold, bundle up','Hot soup and a film at home is the safest plan.']}}
+};
+const store={get(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+const prefs=Object.assign({theme:'auto',lang:(navigator.language||'tr').toLowerCase().startsWith('tr')?'tr':'en',unitT:'c',unitW:'kmh'},store.get('hd-prefs',{}));
+const S={live:null,city:null,data:null,mode:'h',demoKind:null,favs:store.get('hd-favs',null),favData:{}};
+if(!Array.isArray(S.favs))S.favs=['İstanbul','Ankara','İzmir'].map(n=>ALL.find(a=>a.name===n));
+const t=(k,...a)=>{const v=I18N[prefs.lang][k]??I18N.tr[k];return typeof v==='function'?v(...a):v};
+
+/* ---------- yardımcılar ---------- */
+const kindOf=c=>c<=1?'clear':c===2?'partly':c===3?'cloudy':c<=48?'fog':(c>=71&&c<=77)||c===85||c===86?'snow':c>=95?'storm':'rain';
+const hm=ms=>new Date(ms).toISOString().slice(11,16);
+const pIso=s=>Date.parse((s.length===10?s+'T00:00':s)+':00Z');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const r0=v=>Math.round(v);
+const pct=n=>prefs.lang==='tr'?'%'+n:n+'%';
+const TC=c=>prefs.unitT==='f'?c*9/5+32:c;
+const TD=d=>prefs.unitT==='f'?d*9/5:d;
+const WS=k=>prefs.unitW==='mph'?k*.621371:k;
+const wUnit=()=>prefs.unitW==='mph'?'mph':t('kmh');
+const cityName=c=>c.raw?c.name:(prefs.lang==='en'&&CITY_EN[c.name])||c.name;
+const countryName=c=>c.raw?c.country:(prefs.lang==='en'?COUNTRY_EN[c.country]||c.country:c.country);
+const keyOf=c=>c.lat.toFixed(2)+','+c.lon.toFixed(2);
+const fmtDate=ms=>{const d=new Date(ms);return t('date',t('daysL')[d.getUTCDay()],d.getUTCDate(),t('mon')[d.getUTCMonth()])};
+function tzOff(tz){try{const p=new Intl.DateTimeFormat('en-US',{timeZone:tz,hourCycle:'h23',year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric',second:'numeric'}).formatToParts(new Date()).reduce((o,x)=>(o[x.type]=+x.value,o),{});return Math.round((Date.UTC(p.year,p.month-1,p.day,p.hour,p.minute,p.second)-Date.now())/60000)}catch(e){return 0}}
+function rng(str){let h=1779033703;for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353);h=h<<13|h>>>19}return()=>{h=Math.imul(h^h>>>16,2246822507);h=Math.imul(h^h>>>13,3266489909);return((h^=h>>>16)>>>0)/4294967296}}
+const ic=(d,extra='')=>`<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
+const CLOUD='M7 18h10a4 4 0 0 0 .6-7.96A5.5 5.5 0 0 0 7.1 9.1 4.5 4.5 0 0 0 7 18z';
+function wicon(kind,day,x,y,s){
+  const g=d=>`<g transform="translate(${x-s/2} ${y-s/2}) scale(${s/24})" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</g>`;
+  const sun=`<circle cx="12" cy="12" r="4.3" fill="var(--sun)" stroke="none"/><path stroke="var(--sun)" d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>`;
+  const moon=`<path fill="var(--muted)" stroke="none" d="M19 14.5A7.5 7.5 0 0 1 9.5 5 7.5 7.5 0 1 0 19 14.5z"/>`;
+  const cl=(dy=0)=>`<path transform="translate(0 ${dy})" stroke="var(--muted)" fill="var(--surface-2)" d="${CLOUD}"/>`;
+  if(kind==='clear')return g(day?sun:moon);
+  if(kind==='partly')return g((day?`<circle cx="16.5" cy="8" r="3.4" fill="var(--sun)" stroke="none"/>`:`<circle cx="17" cy="7.5" r="3" fill="var(--muted)" stroke="none"/>`)+cl(1));
+  if(kind==='cloudy')return g(cl());
+  if(kind==='fog')return g(`<path stroke="var(--muted)" d="M4 9h16M6 13h12M4 17h16"/>`);
+  if(kind==='rain')return g(cl(-3)+`<path stroke="var(--accent)" d="M9 18l-1 3M13 18l-1 3M17 18l-1 3"/>`);
+  if(kind==='snow')return g(cl(-3)+`<path stroke="var(--accent)" d="M9 19v.01M13 21v.01M17 19v.01" stroke-width="2.6"/>`);
+  return g(cl(-3)+`<path fill="var(--sun)" stroke="none" d="M13 14l-4 5h3l-1 4 4-5.5h-3z"/>`);
+}
+
+/* ---------- veri: canlı ---------- */
+async function getJSON(u,ms=7000){const c=new AbortController(),tm=setTimeout(()=>c.abort(),ms);try{const r=await fetch(u,{signal:c.signal});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(tm)}}
+async function fetchLive(c){
+  const q=`latitude=${c.lat}&longitude=${c.lon}&timezone=auto`;
+  const f=getJSON(`https://api.open-meteo.com/v1/forecast?${q}&past_days=1&forecast_days=11&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure&hourly=temperature_2m,precipitation_probability,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max,precipitation_probability_max`);
+  const a=getJSON(`https://air-quality-api.open-meteo.com/v1/air-quality?${q}&current=european_aqi,pm2_5,pm10,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen`).catch(()=>null);
+  const [w,aq]=await Promise.all([f,a]);
+  const now=pIso(w.current.time),H=w.hourly,D=w.daily;
+  let i0=H.time.findIndex(x=>pIso(x)>now-3600e3);if(i0<0)i0=0;
+  const yi=H.time.findIndex(x=>pIso(x)===Math.floor(now/36e5)*36e5-864e5);
+  let d0=D.time.indexOf(w.current.time.slice(0,10));if(d0<0)d0=0;
+  return{now,off:(w.utc_offset_seconds||0)*1000,yest:yi>=0?H.temperature_2m[yi]:null,
+    cur:{t:w.current.temperature_2m,feels:w.current.apparent_temperature,code:w.current.weather_code,isDay:!!w.current.is_day,hum:w.current.relative_humidity_2m,wind:w.current.wind_speed_10m,wdir:w.current.wind_direction_10m,pres:w.current.surface_pressure},
+    pollen:aq&&aq.current?pollenOf(aq.current):null,
+    aqi:aq&&aq.current&&aq.current.european_aqi!=null?{v:aq.current.european_aqi,pm25:aq.current.pm2_5,pm10:aq.current.pm10}:null,
+    hourly:H.time.slice(i0,i0+25).map((x,k)=>({t:pIso(x),temp:H.temperature_2m[i0+k],pop:H.precipitation_probability?H.precipitation_probability[i0+k]:null,code:H.weather_code[i0+k],day:!!H.is_day[i0+k]})),
+    daily:D.time.slice(d0,d0+10).map((x,j)=>{const k=d0+j;return{t:pIso(x),code:D.weather_code[k],max:D.temperature_2m_max[k],min:D.temperature_2m_min[k],sunrise:pIso(D.sunrise[k]),sunset:pIso(D.sunset[k]),uv:D.uv_index_max[k],pop:D.precipitation_probability_max?D.precipitation_probability_max[k]:null}})};
+}
+/* ---------- veri: örnek (API'ye ulaşılamazsa) ---------- */
+function sunTimes(dayMs,lat,lon,offMin){
+  const d=new Date(dayMs),doy=Math.floor((dayMs-Date.UTC(d.getUTCFullYear(),0,0))/864e5);
+  const dec=-23.44*Math.cos(2*Math.PI*(doy+10)/365)*Math.PI/180,la=lat*Math.PI/180;
+  const H=Math.acos(clamp(-Math.tan(la)*Math.tan(dec),-1,1))/Math.PI*12,noon=12+offMin/60-lon/15;
+  return[dayMs+(noon-H)*36e5,dayMs+(noon+H)*36e5];
+}
+function demo(c,forceKind){
+  const off=c.tz?tzOff(c.tz):Math.round(c.lon/15)*60,now=Date.now()+off*6e4,day0=Math.floor(now/864e5)*864e5;
+  const R=rng(c.name+new Date(day0).toISOString().slice(0,10)),doy=(day0-Date.UTC(new Date(day0).getUTCFullYear(),0,0))/864e5;
+  const season=Math.cos(2*Math.PI*(doy-196)/365)*(c.lat>=0?1:-1),mean=28-.35*Math.abs(c.lat)+season*Math.min(1.3,Math.abs(c.lat)/40)*10;
+  const pool=[0,1,2,2,3,61,63,80,95,45];const pick=()=>{let k=pool[Math.floor(R()*pool.length)];if(mean<1&&k>=61&&k<95)k=73;return k};
+  const force={clear:0,partly:2,cloudy:3,fog:45,rain:63,snow:73,storm:95}[forceKind];
+  const dOff=[0];for(let i=1;i<11;i++)dOff.push(dOff[i-1]+(R()-.5)*3.2);
+  const tAt=ms=>{const h=(ms-day0)/36e5,di=clamp(Math.floor(h/24),0,9),fr=clamp(h/24-di,0,1);return mean+dOff[di]*(1-fr)+dOff[di+1]*fr+5.2*Math.cos((h%24-15)/24*2*Math.PI)};
+  const daily=[];for(let i=0;i<10;i++){const tt=day0+i*864e5,[sr,ss]=sunTimes(tt,c.lat,c.lon,off),code=i===0&&force!=null?force:pick();daily.push({t:tt,code,max:mean+dOff[i]+5.2,min:mean+dOff[i]-5.2,sunrise:sr,sunset:ss,uv:clamp(7*Math.cos((c.lat-season*20)*Math.PI/180)+R()*1.5,0,11),pop:['rain','storm','snow'].includes(kindOf(code))?55+R()*40:R()*25})}
+  const code=daily[0].code,h0=Math.floor(now/36e5)*36e5,hourly=[];
+  for(let i=0;i<25;i++){const tt=h0+i*36e5,di=clamp(Math.floor((tt-day0)/864e5),0,6);hourly.push({t:tt,temp:tAt(tt),pop:clamp(daily[di].pop+(R()-.5)*20,0,100),code:i<8?code:daily[di].code,day:tt>daily[di].sunrise&&tt<daily[di].sunset})}
+  const tn=tAt(now),wind=6+R()*22+(kindOf(code)==='storm'?18:0),hum=clamp(45+R()*25+(['rain','storm','fog','snow'].includes(kindOf(code))?28:0),20,99);
+  const inEU=c.lat>34&&c.lat<72&&c.lon>-25&&c.lon<45,mo=new Date(now).getUTCMonth(),sea=[0,.1,.6,1,1,.9,.7,.6,.4,.1,0,0][mo];
+  const pollen=inEU?{alder:R()*40*(mo<4?1:0)*sea,birch:R()*300*(mo>=2&&mo<=4?1:0),olive:R()*120*(mo>=3&&mo<=5&&c.lat<45?1:0),grass:R()*60*sea,mugwort:R()*30*(mo>=6&&mo<=8?1:0),ragweed:R()*40*(mo>=7&&mo<=9?1:0)}:null;
+  return{now,off:off*6e4,pollen,yest:tn+(R()-.5)*8,cur:{t:tn,feels:tn-wind*.07+(hum-55)*.03,code,isDay:now>daily[0].sunrise&&now<daily[0].sunset,hum,wind,wdir:R()*360,pres:1004+R()*20},aqi:{v:14+R()*58,pm25:5+R()*20,pm10:10+R()*30},hourly,daily};
+}
+
+/* ---------- yükle & çiz ---------- */
+async function load(c){
+  S.city=c;store.set('hd-city',c);
+  let d=null;
+  if(S.live!==false){try{d=await fetchLive(c);S.live=true}catch(e){S.live=false}}
+  if(S.city!==c)return;
+  if(!d)d=demo(c,S.demoKind);
+  S.data=d;$('#note').hidden=S.live!==false;render();
+  if(S.lastKey&&S.lastKey!==keyOf(c))riseIn();S.lastKey=keyOf(c);
+  if(!S.favLoaded){S.favLoaded=true;loadFavs()}
+  radarFocus();globeFocus();
+}
+function render(){
+  if(!S.data)return;
+  const d=S.data,c=d.cur,k=kindOf(c.code),today=d.daily[0];
+  $('#place').textContent=cityName(S.city)+(S.city.country?', '+countryName(S.city):'');
+  $('#when').textContent=`${fmtDate(d.now)} · ${hm(d.now)}`;
+  const nt=r0(TC(c.t));tween(v=>$('#temp').textContent=v,S.prevT,nt,0);S.prevT=nt;$('#tUnit').textContent=prefs.unitT==='f'?'°F':'°C';
+  $('#cond').textContent=t('codes')[c.code]||'—';
+  $('#feels').textContent=`${t('feels')} ${r0(TC(c.feels))}°`;
+  const df=$('#diff');
+  if(d.yest==null){df.hidden=true}else{
+    const n=r0(TD(c.t-d.yest));df.hidden=false;
+    if(n===0){df.style.setProperty('--dc','var(--muted)');df.innerHTML=ic('<path d="M5 12h14"/>')+`<span>${t('same')}</span>`}
+    else{const up=n>0;df.style.setProperty('--dc',up?'var(--sun)':'var(--accent)');df.innerHTML=ic(up?'<path d="M12 19V5M6 11l6-6 6 6"/>':'<path d="M12 5v14M6 13l6 6 6-6"/>')+`<span>${up?t('warmer',n):t('colder',-n)}</span>`}
+  }
+  $('#hilo').innerHTML=`<span>${ic('<path d="M12 19V5M6 11l6-6 6 6"/>')}${t('hi')} <b class="num">${r0(TC(today.max))}°</b></span><span>${ic('<path d="M12 5v14M6 13l6 6 6-6"/>')}${t('lo')} <b class="num">${r0(TC(today.min))}°</b></span>`;
+  favBtnState();renderAct(k,c.t,c.isDay);renderFact();
+  setScene(k,c.isDay);renderMetrics();animMetrics();renderPollen();renderChart();render10();renderSun();renderMoon();renderFavs();
+}
+
+/* ---------- ilginç bilgiler: [Türkçe, English] ---------- */
+const FACTS={
+ rain:[["Yağmur damlaları en fazla saatte yaklaşık 32 km hızla düşer (saniyede ~9 m). Çiseleyen küçük damlalar ise saniyede 2 metreden yavaş iner.","Raindrops top out at about 32 km/h (≈9 m/s). Tiny drizzle drops fall slower than 2 m/s."],
+  ["Yağmur damlaları gözyaşı şeklinde değildir: küçükleri küre gibidir, büyükleri düşerken hamburger ekmeği gibi yassılaşır ve 5 mm civarını geçince parçalanır.","Raindrops aren't tear-shaped: small ones are spheres, big ones flatten like a burger bun as they fall and break apart once they pass about 5 mm."],
+  ["Bir günde düşen en fazla yağış 1.825 mm: 7–8 Ocak 1966'da Hint Okyanusu'ndaki Réunion adasında, Denise kasırgası sırasında ölçüldü.","The most rain in one day is 1,825 mm, measured on Réunion island in the Indian Ocean on 7–8 January 1966 during Cyclone Denise."],
+  ["Yağmurdan sonraki toprak kokusunun adı \"petrichor\". Kokuyu veren geosmin maddesini burnumuz trilyonda birkaç parça yoğunlukta bile algılar.","The smell after rain is called petrichor. Our noses detect geosmin, the compound behind it, at just a few parts per trillion."],
+  ["Hindistan'daki Mawsynram'a yılda ortalama 11.800 mm'den fazla yağmur yağar; bu, İstanbul'un yıllık yağışının yaklaşık 14 katı.","Mawsynram in India gets more than 11,800 mm of rain a year on average, roughly 14 times what Istanbul gets."]],
+ storm:[["Bir yıldırım kanalı yaklaşık 30.000 °C'ye kadar ısınır; bu, Güneş'in yüzeyinden yaklaşık 5 kat daha sıcak.","A lightning channel heats up to about 30,000 °C, roughly five times hotter than the surface of the Sun."],
+  ["Dünya'da her saniye ortalama 40–50 şimşek çakar; bu da yılda 1 milyardan fazla şimşek demek.","About 40–50 lightning flashes strike Earth every second, more than a billion a year."],
+  ["Kayıtlı en uzun şimşek 829 km: 22 Ekim 2017'de Teksas'tan Kansas City'ye kadar uzandı. Dünya Meteoroloji Örgütü bu rekoru 2025'te onayladı.","The longest lightning flash on record stretched 829 km, from Texas to Kansas City, on 22 October 2017. The WMO certified it in 2025."],
+  ["Şimşeği gördükten sonra gök gürültüsünü duyana kadar geçen saniyeleri say ve 3'e böl: fırtınanın kaç km uzakta olduğunu bulursun.","Count the seconds between the flash and the thunder, then divide by 3: that's roughly how many kilometres away the storm is."]],
+ snow:[["Her kar tanesi altı kollu ya da altıgendir; çünkü su molekülleri buz kristalinde altıgen bir düzende dizilir.","Every snowflake has six arms or six sides, because water molecules line up in a hexagonal pattern in ice."],
+  ["Kar aslında renksizdir. Beyaz görünmesinin sebebi, buz kristallerinin ışığın bütün renklerini her yöne saçmasıdır.","Snow is actually colourless. It looks white because ice crystals scatter every colour of light in all directions."],
+  ["Bir kar tanesi saatte yalnızca 3–6 km hızla süzülerek iner; yağmur damlaları bundan 5–10 kat hızlı düşer.","A snowflake drifts down at only 3–6 km/h; raindrops fall 5–10 times faster."],
+  ["Tek bir kışta en çok kar ABD'deki Mount Baker'a yağdı: 1998–99 kışında toplam 28,96 metre.","The most snow in a single season fell on Mount Baker in the USA: 28.96 metres in the winter of 1998–99."]],
+ fog:[["Sis aslında yere inmiş bir buluttur. İçindeki su damlacıkları bir yağmur damlasından yaklaşık 100 kat küçüktür.","Fog is simply a cloud at ground level. Its droplets are about 100 times smaller than a raindrop."],
+  ["Kanada açıklarındaki Grand Banks, yılda 200'den fazla sisli günüyle dünyanın en sisli yerlerinden biridir.","The Grand Banks off Canada are among the foggiest places on Earth, with more than 200 foggy days a year."],
+  ["Sisli ve durgun havalarda sesler daha uzaktan duyulabilir; yere yakın soğuk hava katmanı ses dalgalarını tekrar yere doğru büker.","On calm, foggy days sounds can carry farther, because the cold air near the ground bends sound waves back down."]],
+ hot35:[["Dünyada ölçülmüş en yüksek hava sıcaklığı 56,7 °C: 10 Temmuz 1913'te ABD'deki Ölüm Vadisi'nde (Furnace Creek) kaydedildi.","The highest air temperature ever recorded is 56.7 °C, at Furnace Creek in Death Valley, USA, on 10 July 1913."],
+  ["Meteoroloji (MGM) verilerine göre Türkiye'de ölçülen en yüksek sıcaklık 50,5 °C: 25 Temmuz 2025'te Şırnak'ın Silopi ilçesinde.","According to Türkiye's meteorological service, the country's highest temperature is 50.5 °C, measured in Silopi, Şırnak, on 25 July 2025."],
+  ["Uydu ölçümlerine göre yeryüzünün en sıcak noktası İran'daki Lut Çölü: 2005'te zemin sıcaklığı 70,7 °C ölçüldü.","Satellites found Earth's hottest ground in Iran's Lut Desert, where the surface reached 70.7 °C in 2005."]],
+ hot:[["Yıllık ortalama sıcaklığı en yüksek yer Etiyopya'daki Dallol: 1960–66 yılları arasında ortalama 34,4 °C ölçüldü.","The place with the highest average temperature is Dallol, Ethiopia: 34.4 °C on average between 1960 and 1966."],
+  ["Eyfel Kulesi yazın sıcakta metal genleştiği için 15 cm'ye kadar uzayabilir.","The Eiffel Tower can grow up to 15 cm taller in summer as its metal expands in the heat."],
+  ["Sıcak havada demiryolu rayları genleşir; bu yüzden raylar ya aralıklı döşenir ya da önceden gerilerek bükülmeleri engellenir.","Rails expand in hot weather, so tracks are laid with gaps or pre-stretched to stop them buckling."]],
+ cold:[["Dünyada ölçülen en düşük sıcaklık −89,2 °C: 21 Temmuz 1983'te Antarktika'daki Vostok İstasyonu'nda kaydedildi.","The lowest temperature ever measured is −89.2 °C, at Vostok Station in Antarctica on 21 July 1983."],
+  ["İnsanların yaşadığı en soğuk yerlerden biri olan Oymyakon'da (Rusya) 1933'te −67,7 °C ölçüldü.","In Oymyakon, Russia, one of the coldest inhabited places, the temperature fell to −67.7 °C in 1933."],
+  ["−40 derecede Celsius ve Fahrenheit aynı değeri gösterir: −40 °C = −40 °F.","At −40 degrees, Celsius and Fahrenheit meet: −40 °C equals −40 °F."]],
+ wind:[["Ölçülen en hızlı rüzgar hamlesi 408 km/sa: 10 Nisan 1996'da Avustralya'daki Barrow Adası'nda Olivia kasırgası sırasında.","The fastest wind gust ever measured is 408 km/h, on Barrow Island, Australia, during Cyclone Olivia on 10 April 1996."],
+  ["Çoğu rüzgar türbini, rüzgar saatte yaklaşık 90 km'yi geçince zarar görmemek için kendini durdurur.","Most wind turbines shut themselves down when the wind passes about 90 km/h to avoid damage."]],
+ night:[["Karanlık bir gökyüzünde çıplak gözle aynı anda yaklaşık 2.500 yıldız görebilirsin; şehir ışıkları bu sayıyı birkaç yüze düşürür.","Under a dark sky you can see about 2,500 stars at once with the naked eye; city lights cut that to a few hundred."],
+  ["Kutup Yıldızı'nın ışığı bize yaklaşık 430 yılda ulaşır; yani bu gece gördüğün ışık 1590'larda yola çıktı.","Light from Polaris takes about 430 years to reach us, so tonight's starlight set off in the 1590s."]],
+ clouds:[["Ortalama bir pamuk bulutu (kümülüs) yaklaşık 500 ton su taşır; bu, yaklaşık 100 filin ağırlığı kadar.","An average cumulus cloud holds about 500 tonnes of water, roughly the weight of 100 elephants."],
+  ["Dünya yüzeyinin herhangi bir anda yaklaşık üçte ikisi bulutlarla kaplıdır.","At any moment, about two thirds of Earth's surface is covered by clouds."],
+  ["Bulutlu havada bile güneşin UV ışınlarının %80'e kadarı bulutlardan geçebilir; güneş kremini unutma.","Even on cloudy days up to 80% of the Sun's UV rays can get through, so sunscreen still matters."]],
+ sun:[["Güneş ışığı Dünya'ya yaklaşık 8 dakika 20 saniyede ulaşır; yani gördüğün Güneş 8 dakika öncesine ait.","Sunlight takes about 8 minutes 20 seconds to reach Earth, so the Sun you see is 8 minutes old."],
+  ["Gökyüzü mavi görünür çünkü atmosfer mavi ışığı kırmızı ışıktan çok daha fazla saçar. Buna Rayleigh saçılması denir.","The sky looks blue because air scatters blue light much more than red light. This is called Rayleigh scattering."]]};
+function factPool(k,tc,wind,day){const c=[];
+  if(k==='storm')c.push('storm');if(k==='snow')c.push('snow');if(k==='rain')c.push('rain');if(k==='fog')c.push('fog');
+  if(tc>=35)c.push('hot35');else if(tc>=28)c.push('hot');if(tc<=0)c.push('cold');if(wind>=40)c.push('wind');
+  if(!day&&(k==='clear'||k==='partly'))c.push('night');if(k==='cloudy'||k==='partly')c.push('clouds');if(day&&k==='clear')c.push('sun');if(!c.length)c.push('clouds');
+  return{pool:c.flatMap(x=>FACTS[x]),first:FACTS[c[0]].length}}
+const strHash=s=>{let h=0;for(const ch of s)h=(h*31+ch.charCodeAt(0))|0;return Math.abs(h)};
+S.factOff=0;
+function renderFact(){const d=S.data,c=d.cur,{pool,first}=factPool(kindOf(c.code),c.t,c.wind,c.isDay);
+  const base=strHash(S.city.name+new Date(d.now).toISOString().slice(0,10))%first,f=pool[(base+S.factOff)%pool.length];
+  $('#factT').textContent=f[prefs.lang==='en'?1:0];$('#factMore').hidden=pool.length<2}
+$('#factMore').addEventListener('click',()=>{S.factOff++;renderFact()});
+
+/* ---------- mikro animasyonlar ---------- */
+function tween(set,from,to,dec){const f=x=>dec?x.toFixed(dec):String(Math.round(x));
+  if(matchMedia('(prefers-reduced-motion:reduce)').matches||from==null||!isFinite(from)||from===to){set(f(to));return}
+  const t0=performance.now(),D=700,step=n=>{const p=Math.min(1,(n-t0)/D),e=1-Math.pow(1-p,3);set(f(from+(to-from)*e));if(p<1)requestAnimationFrame(step)};requestAnimationFrame(step)}
+function animMetrics(){const next=[];document.querySelectorAll('#metrics .m-v').forEach((el,i)=>{const n=el.firstChild;if(!n||n.nodeType!==3)return;
+  const v=parseFloat(n.nodeValue);if(!isFinite(v))return;const dec=(n.nodeValue.split('.')[1]||'').length;tween(x=>n.nodeValue=x,S.prevM?S.prevM[i]:null,v,dec);next[i]=v});S.prevM=next}
+function riseIn(){['.tips','.hero-txt','#metrics','#pollen'].forEach(q=>{const e=$(q);if(!e)return;e.classList.remove('rise');void e.offsetWidth;e.classList.add('rise')})}
+
+/* ---------- polen ---------- */
+const POL=[['alder','tree'],['birch','tree'],['olive','tree'],['grass','grass'],['mugwort','weed'],['ragweed','weed']];
+const POL_TH={tree:[15,90,1500],grass:[5,20,200],weed:[10,50,500]}; // NAB: düşük / orta / yüksek / çok yüksek eşikleri (tane/m³)
+const POL_C=['var(--muted)','var(--good)','var(--warn)','var(--bad)','#8E2A8E'];
+function pollenOf(o){const r={};let any=false;POL.forEach(([k])=>{const v=o[k+'_pollen'];r[k]=v==null?null:v;if(v!=null)any=true});return any?r:null}
+const polLv=(v,g)=>{if(v==null||v<1)return 0;const th=POL_TH[g];return v<th[0]?1:v<th[1]?2:v<th[2]?3:4};
+function renderPollen(){
+  const box=$('#polBody'),p=S.data&&S.data.pollen;
+  if(!p){box.innerHTML=`<div class="pol-na"></div>`;box.firstChild.textContent=t('pollenNA');return}
+  const items=POL.map(([k,g])=>({k,v:p[k],lv:polLv(p[k],g)})),top=items.reduce((a,b)=>b.lv>a.lv?b:a,items[0]);
+  const names=t('pollenN'),lvN=t('pollenLv');
+  box.innerHTML=`<div class="pol-head"><span class="pol-risk" style="--pc:${POL_C[top.lv]}">${t('pollenRisk')}: ${lvN[top.lv]}</span><span class="pol-sub">${top.lv?t('pollenTop',names[top.k],lvN[top.lv]):t('pollenNone')}</span></div>
+   <div class="pol-grid">${items.map(x=>`<div class="pol"><b>${names[x.k]}</b><div class="pol-m">${[1,2,3,4].map(i=>`<i style="${x.lv>=i?'background:'+POL_C[x.lv]:''}"></i>`).join('')}</div><span>${lvN[x.lv]} · ${x.v==null?'—':r0(x.v)} ${t('pollenUnit')}</span></div>`).join('')}</div>
+   <div class="pol-foot">${t('pollenFoot')}</div>`;
+}
+
+/* ---------- konum ---------- */
+function locate(){
+  if(!navigator.geolocation){toast(t('locNo'));return}
+  const b=$('#locBtn');if(b.classList.contains('busy'))return;b.classList.add('busy');b.setAttribute('aria-busy','true');
+  const done=()=>{b.classList.remove('busy');b.removeAttribute('aria-busy')};
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    const lat=+pos.coords.latitude.toFixed(3),lon=+pos.coords.longitude.toFixed(3);let name=t('myLoc'),country='';
+    try{const j=await getJSON(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=${prefs.lang}`);name=j.city||j.locality||j.principalSubdivision||name;country=j.countryName||''}catch(e){}
+    done();go({name,country,lat,lon,raw:true});
+  },err=>{done();toast(err&&err.code===1?t('locDenied'):t('locFail'))},{enableHighAccuracy:false,timeout:10000,maximumAge:600000});
+}
+$('#locBtn').addEventListener('click',locate);
+
+/* ---------- aktivite önerisi ---------- */
+/* renkli aktivite simgeleri: [arka plan tonu, svg içeriği] */
+const AI={
+ home:['#E4572E','<rect x="15.3" y="4.2" width="2.4" height="4.6" rx=".4" fill="#A8432C"/><path d="M5 11.6 12 5.9l7 5.7V20a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z" fill="#FFE3B8"/><path d="M2.4 11.3 12 3.5l9.6 7.8-1.3 1.6L12 6.2l-8.3 6.7z" fill="#E4572E"/><rect x="10" y="14.4" width="4" height="6.6" rx="1" fill="#9A5B34"/><circle cx="13.2" cy="17.8" r=".45" fill="#FFD27A"/><rect x="15" y="12.2" width="2.6" height="2.6" rx=".5" fill="#FFC83D"/><rect x="6.4" y="12.2" width="2.6" height="2.6" rx=".5" fill="#FFC83D"/>'],
+ cup:['#B5651D','<path d="M8.5 2.6c-1 1.2 1 2 0 3.3M12 2.6c-1 1.2 1 2 0 3.3" stroke="#9FB0C3" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M16.6 10h1.6a3 3 0 0 1 0 6h-1.6" fill="none" stroke="#E4572E" stroke-width="2"/><path d="M3.8 8h13v7a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5z" fill="#E4572E"/><ellipse cx="10.3" cy="8.3" rx="6.3" ry="1.3" fill="#6B3E26"/><path d="M6 11.5v3.2a3 3 0 0 0 1.6 2.6" stroke="#FF8A65" stroke-width="1.2" fill="none" stroke-linecap="round"/><rect x="2.6" y="20.3" width="15.4" height="1.7" rx=".85" fill="#B9C6D4"/>'],
+ film:['#E63946','<circle cx="7" cy="8" r="2.4" fill="#FFF3C4" stroke="#F2C14E" stroke-width=".8"/><circle cx="17" cy="8" r="2.4" fill="#FFF3C4" stroke="#F2C14E" stroke-width=".8"/><circle cx="9.6" cy="6.2" r="2.5" fill="#FFF3C4" stroke="#F2C14E" stroke-width=".8"/><circle cx="14.4" cy="6.2" r="2.5" fill="#FFF3C4" stroke="#F2C14E" stroke-width=".8"/><circle cx="12" cy="7.6" r="2.5" fill="#FFF3C4" stroke="#F2C14E" stroke-width=".8"/><path d="M4.6 9h14.8l-1.7 12.1a1 1 0 0 1-1 .9H7.3a1 1 0 0 1-1-.9z" fill="#FFFFFF"/><path d="M7.4 9h2.3l.5 13H8.3zM11.1 9h2.3l-.1 13h-2.1zM14.8 9h2.3l-1.2 13h-1.6z" fill="#E63946"/><path d="M4.6 9h14.8" stroke="#C92A36" stroke-width="1.2"/>'],
+ umb:['#3B82F6','<path d="M12 12.5v6a2 2 0 0 1-4 0" fill="none" stroke="#5B6B7F" stroke-width="1.8" stroke-linecap="round"/><path d="M2.5 12.5a9.5 9.5 0 0 1 19 0z" fill="#3B82F6"/><path d="M12 3c-2.6 2.2-4 5.6-4 9.5h8c0-3.9-1.4-7.3-4-9.5z" fill="#FACC15"/><path d="M12 3a9.5 9.5 0 0 1 9.5 9.5H16c0-3.9-1.4-7.3-4-9.5z" fill="#EF4444"/><circle cx="12" cy="2.7" r=".9" fill="#5B6B7F"/><path d="M4.6 16.5l-.8 1.9M19.4 15.8l-.8 1.9M17 19.6l-.6 1.5" stroke="#60A5FA" stroke-width="1.6" stroke-linecap="round"/>'],
+ ball:['#F97316','<circle cx="12" cy="12" r="9.5" fill="#F97316"/><path d="M8 4.6a9 9 0 0 1 3-1" stroke="#FDBA74" stroke-width="1.4" fill="none" stroke-linecap="round"/><path d="M2.5 12h19M12 2.5v19M5.3 5.3c3.4 3.4 3.4 10 0 13.4M18.7 5.3c-3.4 3.4-3.4 10 0 13.4" fill="none" stroke="#7C2D12" stroke-width="1.3"/>'],
+ wave:['#0EA5E9','<circle cx="16.5" cy="7" r="3.6" fill="#FBBF24"/><path d="M16.5 1.6v1.3M21.9 7h-1.3M20.3 3.2l-.9.9" stroke="#FBBF24" stroke-width="1.4" stroke-linecap="round"/><path d="M2 13.6c2.4-2 4.6-2 7 0s4.6 2 7 0 4.6-2 6 0V22H2z" fill="#38BDF8"/><path d="M2 17.8c2.4-2 4.6-2 7 0s4.6 2 7 0 4.6-2 6 0V22H2z" fill="#0284C7"/>'],
+ ice:['#EC4899','<path d="M7.8 12h8.4l-4.2 10z" fill="#E9B872"/><path d="M9.3 13.3l4.1 4.1M11.6 12.4l3.2 3.2M14.6 12.6l-5 5M12.2 12.2l-3.6 3.6" stroke="#C28B45" stroke-width=".8"/><circle cx="9.2" cy="10" r="3.3" fill="#F9A8D4"/><circle cx="14.8" cy="10" r="3.3" fill="#86EFAC"/><circle cx="12" cy="7" r="3.3" fill="#FDE68A"/><circle cx="12.6" cy="3.1" r="1.2" fill="#E11D48"/>'],
+ star:['#6366F1','<path d="M15.6 3.5A8.5 8.5 0 1 0 20.6 17 7 7 0 0 1 15.6 3.5z" fill="#FCD34D"/><circle cx="10" cy="13" r="1.2" fill="#F5B83B"/><circle cx="13.5" cy="17.2" r=".8" fill="#F5B83B"/><path d="M5 2.4l.9 2.1 2.1.9-2.1.9L5 8.4l-.9-2.1L2 5.4l2.1-.9z" fill="#A78BFA"/><path d="M20 7.6l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" fill="#818CF8"/>'],
+ park:['#22C55E','<circle cx="18.3" cy="5.6" r="3" fill="#FBBF24"/><rect x="8" y="12.5" width="2.4" height="8.5" rx=".6" fill="#92400E"/><circle cx="6.2" cy="11.4" r="3.3" fill="#16A34A"/><circle cx="12.4" cy="11.4" r="3.3" fill="#16A34A"/><circle cx="9.2" cy="8.4" r="4.6" fill="#22C55E"/><circle cx="7.8" cy="7" r="1.1" fill="#4ADE80"/><rect x="2" y="20.2" width="20" height="2.2" rx="1.1" fill="#84CC16"/>'],
+ shoe:['#3B82F6','<path d="M2.4 17.6V11.8c0-.6.3-1.1.8-1.4l3.6-2.5 3.6 3.6h2.4l7.3 3.1a3 3 0 0 1 1.8 2.8v.2z" fill="#3B82F6"/><path d="M8.2 10.4l1.4-1M9.6 11.6l1.4-1" stroke="#DBEAFE" stroke-width="1.2" stroke-linecap="round"/><path d="M5.6 14.6c3.2.9 7.2.6 10.6-1.1" stroke="#FFFFFF" stroke-width="1.5" fill="none" stroke-linecap="round"/><rect x="1.8" y="17.4" width="20.6" height="3.4" rx="1.7" fill="#CBD5E1"/><path d="M4 19.1h2.2M8 19.1h2.2M12 19.1h2.2M16 19.1h2.2" stroke="#94A3B8" stroke-width="1" stroke-linecap="round"/>']};
+function activity(k,tc,day){
+  if(k==='storm')return['home','storm'];if(k==='snow')return['film','snow'];
+  if(k==='rain')return tc>=18?['umb','rainW']:['cup','rainC'];if(k==='fog')return['cup','fog'];
+  if(tc>=35)return['wave','t35'];if(tc>=30)return['ice','t30'];
+  if(!day&&k==='clear'&&tc>=10)return['star','stars'];
+  if(tc>=25)return['ball','t25'];if(tc>=18)return['park','t18'];if(tc>=10)return['shoe','t10'];if(tc>=0)return['cup','t0'];return['home','frz'];
+}
+function renderAct(k,tc,day){const [i,key]=activity(k,tc,day),[title,sub]=t('act')[key],[tint,svg]=AI[i],box=$('#actIc');
+  box.style.setProperty('--tint',tint);box.innerHTML=`<svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg>`;$('#actT').textContent=title;$('#actS').textContent=sub}
+
+function renderMetrics(){
+  const d=S.data,c=d.cur,td=d.daily[0];
+  const dir=t('dirs')[Math.round(c.wdir/45)%8];
+  const bi=c.wind<6?0:c.wind<20?1:c.wind<39?2:c.wind<62?3:4;
+  let aq=`<div class="m-v num">—</div><div class="m-s">${t('noData')}</div>`;
+  if(d.aqi){const v=d.aqi.v,ai=v<=20?0:v<=40?1:v<=60?2:v<=80?3:4,col=['var(--good)','var(--good)','var(--warn)','var(--bad)','var(--bad)'][ai];
+    aq=`<div class="m-v num">${r0(v)}<small>AQI</small></div><div class="m-s"><span class="pill" style="--pc:${col}">${t('aqN')[ai]}</span>· PM2.5 ${r0(d.aqi.pm25)}</div>`}
+  const uv=td.uv,uvn=uv==null?'':t('uvN')[uv<3?0:uv<6?1:uv<8?2:uv<11?3:4];
+  const pop=td.pop,pi=c.pres<1005?0:c.pres>1020?2:1;
+  const M=(icon,l,body)=>`<div class="m"><div class="m-l">${ic(icon)}${l}</div>${body}</div>`;
+  $('#metrics').setAttribute('aria-label',t('hum')+', '+t('wind'));
+  $('#metrics').innerHTML=
+   M('<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',t('hum'),`<div class="m-v num">${r0(c.hum)}<small>%</small></div><div class="m-s"><span class="meter"><i style="width:${clamp(c.hum,0,100)}%"></i></span></div>`)+
+   M('<path d="M3 9h11a3 3 0 1 0-3-3M3 15h15a3 3 0 1 1-3 3M3 12h7"/>',t('aq'),aq)+
+   M('<path d="M4 8h10a2.5 2.5 0 1 0-2.5-2.5M4 12h15M4 16h8a2.5 2.5 0 1 1-2.5 2.5"/>',t('wind'),`<div class="m-v num">${r0(WS(c.wind))}<small>${wUnit()}</small></div><div class="m-s"><span class="arrow" style="transform:rotate(${c.wdir+180}deg)">${ic('<path d="M12 20V4M6 10l6-6 6 6"/>')}</span>${dir} · ${t('beau')[bi]}</div>`)+
+   M('<circle cx="12" cy="13" r="8"/><path d="M12 13l3.5-4M12 3v2"/>',t('pres'),`<div class="m-v num">${r0(c.pres)}<small>hPa</small></div><div class="m-s">${t('presN')[pi]}</div>`)+
+   M('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/>',t('uv'),`<div class="m-v num">${uv==null?'—':uv.toFixed(1)}</div><div class="m-s">${uvn}</div>`)+
+   M(`<path d="${CLOUD}" transform="translate(0 -4)"/><path d="M9 18l-1 3M13 18l-1 3M17 18l-1 3"/>`,t('pop'),`<div class="m-v num">${pop==null?'—':r0(pop)}<small>%</small></div><div class="m-s"><span class="meter"><i style="width:${clamp(pop||0,0,100)}%"></i></span></div>`);
+}
+
+/* ---------- grafik ---------- */
+function renderChart(){
+  const el=$('#chart'),d=S.data;if(!d)return;
+  const W=Math.max(300,el.clientWidth),Hh=236,L=38,R=16,T=52,B=30,daily=S.mode==='d';
+  $('#legend').hidden=!daily;
+  const pts=(daily?d.daily.slice(0,7):d.hourly).map(p=>({...p,temp:p.temp!=null?TC(p.temp):null,max:p.max!=null?TC(p.max):null,min:p.min!=null?TC(p.min):null})),n=pts.length;
+  const series=daily?[{k:'max',col:'var(--sun)'},{k:'min',col:'var(--accent)'}]:[{k:'temp',col:'var(--accent)'}];
+  const all=pts.flatMap(p=>series.map(s=>p[s.k]));let lo=Math.min(...all),hi=Math.max(...all);
+  const step=[1,2,5,10,20].find(s=>(hi-lo)/s<=4)||20;lo=Math.floor((lo-.5)/step)*step;hi=Math.ceil((hi+.5)/step)*step;
+  const X=i=>L+(W-L-R)*i/(n-1),Y=v=>T+(Hh-T-B)*(1-(v-lo)/(hi-lo));
+  const path=k=>{let s=`M${X(0)} ${Y(pts[0][k])}`;for(let i=0;i<n-1;i++){const p0=pts[Math.max(0,i-1)][k],p1=pts[i][k],p2=pts[i+1][k],p3=pts[Math.min(n-1,i+2)][k],dx=(X(1)-X(0))/3;s+=` C${X(i)+dx} ${Y(p1+(p2-p0)/6)} ${X(i+1)-dx} ${Y(p2-(p3-p1)/6)} ${X(i+1)} ${Y(p2)}`}return s};
+  const every=daily?1:(W<560?6:3);
+  let g='';for(let v=lo;v<=hi+1e-9;v+=step)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="${v===lo?'0':'3 5'}"/><text x="${L-8}" y="${Y(v)+4}" text-anchor="end">${v}°</text>`;
+  let lab='';pts.forEach((p,i)=>{if(i%every)return;const anchor=i===0?'start':i===n-1?'end':'middle',x=X(i);
+    lab+=`<text x="${x}" y="${Hh-8}" text-anchor="${anchor}">${daily?(i===0?t('today'):t('days')[new Date(p.t).getUTCDay()]):(i===0?t('now'):hm(p.t))}</text>`;
+    const top=daily?p.max:p.temp,ix=clamp(x,L+10,W-R-10);
+    lab+=wicon(kindOf(p.code),daily?true:p.day,ix,14,20)+`<text class="val" x="${ix}" y="40" text-anchor="middle">${r0(top)}°</text>`});
+  const area=`${path(series[0].k)} L${X(n-1)} ${Y(lo)} L${X(0)} ${Y(lo)}Z`;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="${t('chartT')}"><defs><linearGradient id="ar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${series[0].col}" stop-opacity=".28"/><stop offset="1" stop-color="${series[0].col}" stop-opacity="0"/></linearGradient></defs>${g}
+   <path d="${area}" fill="url(#ar)" stroke="none"/>${series.map(s=>`<path d="${path(s.k)}" fill="none" stroke="${s.col}" stroke-width="2.6" stroke-linecap="round"/>`).join('')}
+   ${series.map(s=>`<circle cx="${X(0)}" cy="${Y(pts[0][s.k])}" r="4.5" fill="var(--surface)" stroke="${s.col}" stroke-width="2.6"/>`).join('')}
+   ${lab}<g id="hov" visibility="hidden"><line id="hl" y1="${T-4}" y2="${Hh-B}" stroke="var(--muted)" stroke-width="1"/>${series.map((s,i)=>`<circle id="hd${i}" r="5" fill="${s.col}" stroke="var(--surface)" stroke-width="2"/>`).join('')}</g>
+   <rect id="hit" x="${L}" y="${T-10}" width="${W-L-R}" height="${Hh-T-B+10}" fill="transparent"/></svg><div class="tip" id="tip" hidden></div>`;
+  const hit=el.querySelector('#hit'),hov=el.querySelector('#hov'),tip=el.querySelector('#tip');
+  const move=e=>{const r=el.getBoundingClientRect(),px=(e.clientX-r.left)*W/r.width,i=clamp(Math.round((px-L)/(W-L-R)*(n-1)),0,n-1),p=pts[i];
+    hov.setAttribute('visibility','visible');el.querySelector('#hl').setAttribute('x1',X(i));el.querySelector('#hl').setAttribute('x2',X(i));
+    series.forEach((s,j)=>{const c=el.querySelector('#hd'+j);c.setAttribute('cx',X(i));c.setAttribute('cy',Y(p[s.k]))});
+    tip.hidden=false;tip.style.left=clamp(X(i)*r.width/W,80,r.width-80)+'px';
+    const rain=p.pop!=null?` · ${t('rain')} ${pct(r0(p.pop))}`:'';
+    tip.innerHTML=daily?`${t('daysL')[new Date(p.t).getUTCDay()]} · <b>${r0(p.max)}° / ${r0(p.min)}°</b>${rain}`:`${hm(p.t)} · <b>${p.temp.toFixed(1)}°</b>${rain}`};
+  hit.addEventListener('pointermove',move);hit.addEventListener('pointerdown',move);
+  hit.addEventListener('pointerleave',()=>{hov.setAttribute('visibility','hidden');tip.hidden=true});
+}
+
+/* ---------- 10 günlük tahmin ---------- */
+function render10(){
+  const d=S.data,days=d.daily.slice(0,10),lo=Math.min(...days.map(x=>x.min)),hi=Math.max(...days.map(x=>x.max)),span=Math.max(1,hi-lo);
+  const sc=SCALES.temp,rgb=v=>{const c=colorAt(sc,v);return`rgb(${c.map(Math.round).join(',')})`};
+  $('#d10').innerHTML=days.map((x,i)=>{const dt=new Date(x.t),a=(x.min-lo)/span*100,b=(x.max-lo)/span*100;
+    const name=i===0?t('today'):t('days')[dt.getUTCDay()],sub=t('dm',dt.getUTCDate(),t('mon')[dt.getUTCMonth()]);
+    const pop=x.pop!=null&&x.pop>=20,now=i===0?`<b style="left:${clamp((d.cur.t-lo)/span*100,0,100)}%"></b>`:'';
+    return`<div class="d10-r"><div class="d10-d"><b>${name}</b><small>${sub}</small></div>
+      <svg width="30" height="30" viewBox="0 0 30 30" aria-label="${t('codes')[x.code]||''}">${wicon(kindOf(x.code),true,15,15,28)}</svg>
+      <span class="d10-p ${pop?'':'dry'}">${pop?ic('<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>','style="width:11px;height:11px"')+pct(r0(x.pop)):'–'}</span>
+      <span class="d10-lo">${r0(TC(x.min))}°</span>
+      <div class="d10-bar"><i style="left:${a}%;right:${100-b}%;background:linear-gradient(90deg,${rgb(x.min)},${rgb(x.max)})"></i>${now}</div>
+      <span class="d10-hi">${r0(TC(x.max))}°</span></div>`}).join('');
+}
+
+/* ---------- güneş ---------- */
+function renderSun(){
+  const d=S.data,td=d.daily[0],sr=td.sunrise,ss=td.sunset,f=clamp((d.now-sr)/(ss-sr),0,1),up=d.now>sr&&d.now<ss;
+  const cx=160,cy=132,r=120,a=Math.PI*(1-f),x=cx+r*Math.cos(a),y=cy-r*Math.sin(a);
+  const dur=ms=>t('dur',Math.floor(ms/36e5),Math.round(ms%36e5/6e4));
+  $('#sunState').textContent=up?t('sunsetIn',dur(ss-d.now)):d.now<sr?t('sunriseIn',dur(sr-d.now)):t('sunGone');
+  $('#sunArc').innerHTML=`<svg viewBox="0 0 320 162" role="img" aria-label="${t('sunT')}"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--sun)" stop-opacity=".22"/><stop offset="1" stop-color="var(--sun)" stop-opacity="0"/></linearGradient></defs>
+   <path d="M${cx-r} ${cy} A${r} ${r} 0 0 1 ${cx+r} ${cy}" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="2 7" stroke-linecap="round"/>
+   ${f>0?`<path d="M${cx-r} ${cy} A${r} ${r} 0 0 1 ${x} ${y} L${x} ${cy}Z" fill="url(#sg)" stroke="none"/><path d="M${cx-r} ${cy} A${r} ${r} 0 0 1 ${x} ${y}" fill="none" stroke="var(--sun)" stroke-width="3" stroke-linecap="round"/>`:''}
+   <line x1="16" x2="304" y1="${cy}" y2="${cy}" stroke="var(--line)" stroke-width="1.5"/>
+   <circle cx="${cx-r}" cy="${cy}" r="3.5" fill="var(--muted)"/><circle cx="${cx+r}" cy="${cy}" r="3.5" fill="var(--muted)"/>
+   ${up?`<circle cx="${x}" cy="${y}" r="15" fill="var(--sun)" opacity=".22"/><circle cx="${x}" cy="${y}" r="8.5" fill="var(--sun)"/>`:''}
+   <text x="${cx-r}" y="${cy+18}" text-anchor="middle">${hm(sr)}</text><text x="${cx+r}" y="${cy+18}" text-anchor="middle">${hm(ss)}</text><text x="${cx}" y="${cy+18}" text-anchor="middle">${t('horizon')}</text></svg>`;
+  const up_i='<path d="M3 19h18M7 19a5 5 0 0 1 10 0M12 9V3M9 6l3-3 3 3"/>',dn_i='<path d="M3 19h18M7 19a5 5 0 0 1 10 0M12 3v6M9 6l3 3 3-3"/>',cl_i='<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
+  $('#sunRows').innerHTML=`<div><span>${ic(up_i)}${t('sunrise')}</span><b class="num">${hm(sr)}</b></div><div><span>${ic(dn_i)}${t('sunset')}</span><b class="num">${hm(ss)}</b></div><div><span>${ic(cl_i)}${t('dayLen')}</span><b class="num">${dur(ss-sr)}</b></div>`;
+}
+
+/* ---------- ay ---------- */
+const SYN=29.530588853;
+function moonSvg(p,size){
+  const r=size/2-1.5,c=size/2,rx=Math.abs(Math.cos(2*Math.PI*p))*r,wax=p<.5,crescent=p<.25||p>.75;
+  const lit=p<.012||p>.988?'':Math.abs(p-.5)<.012?`<circle cx="${c}" cy="${c}" r="${r}" class="moon-lit"/>`:
+   `<path class="moon-lit" d="M${c} ${c-r} A${r} ${r} 0 0 ${wax?1:0} ${c} ${c+r} A${rx} ${r} 0 0 ${(wax?crescent:!crescent)?0:1} ${c} ${c-r}Z"/>`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${c}" cy="${c}" r="${r}" class="moon-dark" stroke-width="1"/>${lit}</svg>`;
+}
+function renderMoon(){
+  const age=(((Date.now()-Date.UTC(2000,0,6,18,14))/864e5)%SYN+SYN)%SYN,p=age/SYN,ill=(1-Math.cos(2*Math.PI*p))/2,idx=Math.round(p*8)%8;
+  const fmt=days=>{const x=new Date(Date.now()+S.data.off+days*864e5);return t('dm',x.getUTCDate(),t('mon')[x.getUTCMonth()])};
+  const toFull=((.5-p+1)%1)*SYN,toNew=(1-p)*SYN;
+  $('#moonMain').innerHTML=moonSvg(p,104)+`<div style="min-width:0;flex:1"><div class="moon-name">${t('moonN')[idx]}</div><div class="moon-sub">${t('lit',Math.round(ill*100))} · ${t('age',age.toFixed(1))}</div>
+   <div class="rows" style="grid-template-columns:1fr 1fr;margin-top:12px"><div><span>${t('nextFull')}</span><b class="num">${fmt(toFull)}</b></div><div><span>${t('nextNew')}</span><b class="num">${fmt(toNew)}</b></div></div></div>`;
+  $('#phases').innerHTML=t('moonS').map((s,i)=>`<div class="${i===idx?'on':''}">${moonSvg(i/8,26)}<span>${s}</span></div>`).join('');
+}
+
+/* ---------- favoriler ---------- */
+const isFav=c=>c&&S.favs.some(f=>keyOf(f)===keyOf(c));
+function favBtnState(){const b=$('#favBtn'),on=isFav(S.city);b.setAttribute('aria-pressed',on);b.title=on?t('favDel'):t('favAdd');b.setAttribute('aria-label',b.title)}
+let msgT;
+function favMsg(s){$('#favMsg').textContent=s;clearTimeout(msgT);if(s)msgT=setTimeout(()=>$('#favMsg').textContent='',3500)}
+$('#favBtn').addEventListener('click',()=>{
+  const c=S.city;if(!c)return;
+  if(isFav(c))S.favs=S.favs.filter(f=>keyOf(f)!==keyOf(c));
+  else{if(S.favs.length>=5){favMsg(t('favFull'));return}S.favs=[...S.favs,c]}
+  store.set('hd-favs',S.favs);favMsg('');favBtnState();loadFavs();
+});
+async function loadFavs(){
+  const list=S.favs.slice();renderFavs();if(!list.length)return;
+  let res=null;
+  if(S.live){try{const j=await getJSON(`https://api.open-meteo.com/v1/forecast?latitude=${list.map(c=>c.lat).join(',')}&longitude=${list.map(c=>c.lon).join(',')}&current=temperature_2m,weather_code,is_day&timezone=auto`);
+    const arr=Array.isArray(j)?j:[j];res=arr.map(x=>({t:x.current.temperature_2m,code:x.current.weather_code,day:!!x.current.is_day}))}catch(e){}}
+  if(!res)res=list.map(c=>{const d=demo(c,null);return{t:d.cur.t,code:d.cur.code,day:d.cur.isDay}});
+  list.forEach((c,i)=>S.favData[keyOf(c)]=res[i]);renderFavs();
+}
+function renderFavs(){
+  const row=$('#favRow');row.textContent='';
+  if(!S.favs.length){const e=document.createElement('div');e.className='fav-empty';e.textContent=t('favEmpty');row.append(e);return}
+  S.favs.forEach(c=>{const fd=S.favData[keyOf(c)],b=document.createElement('button');b.type='button';b.className='fav';
+    b.setAttribute('aria-current',S.city&&keyOf(S.city)===keyOf(c));
+    b.innerHTML=`<svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">${fd?wicon(kindOf(fd.code),fd.day,15,15,28):''}</svg><span class="fav-n"><b></b><small></small></span><span class="fav-t num">${fd?r0(TC(fd.t))+'°':'–'}</span>`;
+    b.querySelector('b').textContent=cityName(c);b.querySelector('small').textContent=fd?t('codes')[fd.code]||'':countryName(c);
+    b.addEventListener('click',()=>go(c));row.append(b)});
+}
+
+/* ---------- gökyüzü sahnesi (canvas) ---------- */
+let skyMul=1;const cv=$('#sky');let cx=cv.getContext('2d');const SC0=0,SC={kind:'clear',day:true,clouds:[],drops:[],stars:[],flash:0,next:1.5,bolt:null,t:0};
+const still=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const SKY={day:{clear:['#2F86FF','#A5D2FF'],partly:['#4990EA','#BAD8F6'],cloudy:['#7A8BA3','#BCC6D3'],fog:['#98A2AE','#CDD2D9'],rain:['#44556E','#8696AD'],snow:['#8CA1BC','#D8E0EB'],storm:['#1E2638','#525E7A']},
+ night:{clear:['#060A1E','#1C2C5A'],partly:['#090F26','#27365F'],cloudy:['#141A2A','#363F55'],fog:['#1D232F','#474E5C'],rain:['#0D1321','#2C3752'],snow:['#19213A','#4C5976'],storm:['#07090F','#272D44']}};
+let W=0,H=0;
+function size(){const r=cv.getBoundingClientRect(),dp=Math.min(2,devicePixelRatio||1);W=r.width;H=r.height;cv.width=W*dp;cv.height=H*dp;cx.setTransform(dp,0,0,dp,0,0)}
+function setScene(kind,day){
+  if(SC.kind===kind&&SC.day===day&&SC.clouds.length)return;
+  if(!still&&SC.clouds.length&&cv.width){const o=document.createElement('canvas');o.width=cv.width;o.height=cv.height;o.getContext('2d').drawImage(cv,0,0);SC.prev=o;SC.fade=1}
+  const R=rng(kind+day);SC.kind=kind;SC.day=day;SC.flash=0;SC.next=1;SC.bolt=null;
+  const nC={clear:1,partly:4,cloudy:8,fog:5,rain:8,snow:7,storm:9}[kind];
+  SC.clouds=Array.from({length:nC},()=>({x:.3+R()*.8,y:.08+R()*(kind==='partly'?.3:.42),s:.6+R()*.8,v:.004+R()*.008,a:kind==='clear'?.35:.55+R()*.4}));
+  const nD=kind==='rain'?110:kind==='storm'?150:kind==='snow'?90:0;
+  SC.drops=Array.from({length:nD},()=>({x:R(),y:R(),l:.6+R()*.8,v:.7+R()*.6,ph:R()*6.28}));
+  SC.stars=Array.from({length:70},()=>({x:R(),y:R()*.8,r:.4+R()*1.2,ph:R()*6.28}));
+  if(still)frame(0,true);
+}
+function cloud(x,y,s,col){cx.fillStyle=col;cx.beginPath();[[0,0,34],[-38,10,24],[36,8,27],[-14,-16,25],[18,-20,22],[-64,18,15],[64,17,16]].forEach(([dx,dy,r])=>{cx.moveTo(x+dx*s+r*s,y+dy*s);cx.arc(x+dx*s,y+dy*s,r*s,0,6.29)});cx.rect(x-64*s,y+10*s,128*s,23*s);cx.fill()}
+function mkBolt(){const pts=[];let x=W*(.52+Math.random()*.4),y=H*.3;pts.push([x,y]);while(y<H*.98){y+=H*(.05+Math.random()*.08);x+=(Math.random()-.45)*W*.05;pts.push([x,y])}return pts}
+/* hilal: ay dairesinden ikinci daireyi gerçekten çıkaran yol (arka plan rengine bağlı değil) */
+function crescent(x,y,r,ox,oy,r2){const dx=ox-x,dy=oy-y,d=Math.hypot(dx,dy),a=(r*r-r2*r2+d*d)/(2*d),h=Math.sqrt(Math.max(0,r*r-a*a)),px=x+a*dx/d,py=y+a*dy/d;
+  const ax=px-h*dy/d,ay=py+h*dx/d,bx=px+h*dy/d,by=py-h*dx/d,M=v=>((v%6.2832)+6.2832)%6.2832,inside=(st,en,g)=>M(g-st)<M(en-st);
+  const phi=Math.atan2(dy,dx),tA=Math.atan2(ay-y,ax-x),tB=Math.atan2(by-y,bx-x),uA=Math.atan2(ay-oy,ax-ox),uB=Math.atan2(by-oy,bx-ox);
+  cx.beginPath();cx.arc(x,y,r,tA,tB,!inside(tA,tB,phi+Math.PI));cx.arc(ox,oy,r2,uB,uA,!inside(uB,uA,phi+Math.PI));cx.closePath();cx.fill()}
+let last=0;
+function frame(ts,once){
+  const dt=Math.min(.05,(ts-last)/1000||0);last=ts;SC.t+=dt;
+  if(!W||!H)size();
+  const k=SC.kind,d=SC.day,col=SKY[d?'day':'night'][k],g=cx.createLinearGradient(0,0,0,H);g.addColorStop(0,col[0]);g.addColorStop(1,col[1]);cx.fillStyle=g;cx.fillRect(0,0,W,H);
+  const sx=W*.8,sy=H*.3,sr=Math.min(H*.17,70)*skyMul;
+  if(!d&&(k==='clear'||k==='partly')){SC.stars.forEach(s=>{cx.globalAlpha=.35+.5*Math.abs(Math.sin(SC.t*.8+s.ph));cx.fillStyle='#fff';cx.beginPath();cx.arc(s.x*W,s.y*H,s.r*skyMul,0,6.29);cx.fill()});cx.globalAlpha=1}
+  if(k==='clear'||k==='partly'){
+    const pul=1+.04*Math.sin(SC.t*1.2),gl=cx.createRadialGradient(sx,sy,sr*.3,sx,sy,sr*3.2*pul);
+    if(d){gl.addColorStop(0,'rgba(255,236,170,.95)');gl.addColorStop(.25,'rgba(255,214,110,.45)');gl.addColorStop(1,'rgba(255,214,110,0)')}else{gl.addColorStop(0,'rgba(220,230,255,.5)');gl.addColorStop(1,'rgba(220,230,255,0)')}
+    cx.fillStyle=gl;cx.fillRect(0,0,W,H);
+    if(d){cx.fillStyle='#FFD766';cx.beginPath();cx.arc(sx,sy,sr,0,6.29);cx.fill();cx.fillStyle='#FFF3C4';cx.beginPath();cx.arc(sx,sy,sr*.72,0,6.29);cx.fill()}
+    else{cx.fillStyle='#EEF2FF';crescent(sx,sy,sr,sx+sr*.42,sy-sr*.22,sr*.86)}
+  }
+  const dark=k==='rain'||k==='storm';
+  SC.clouds.forEach(c=>{c.x+=c.v*dt;if(c.x>1.25)c.x=.15;
+    const a=c.a*(d?1:.6),tone=dark?(d?`rgba(70,82,104,${a})`:`rgba(40,48,68,${a})`):d?`rgba(255,255,255,${a})`:`rgba(150,165,198,${a})`;
+    cloud(c.x*W,c.y*H,c.s*(skyMul>1?skyMul:Math.max(.7,H/330)),tone)});
+  if(k==='fog'){for(let i=0;i<6;i++){const y=H*(.2+i*.14),o=Math.sin(SC.t*.25+i)*W*.05,fg=cx.createLinearGradient(0,y,0,y+H*.12),c1=d?'235,238,243':'150,158,172';fg.addColorStop(0,`rgba(${c1},0)`);fg.addColorStop(.5,`rgba(${c1},.5)`);fg.addColorStop(1,`rgba(${c1},0)`);cx.fillStyle=fg;cx.fillRect(o-W*.1,y,W*1.2,H*.12)}}
+  if(k==='rain'||k==='storm'){cx.strokeStyle='rgba(205,225,255,.6)';cx.lineWidth=1.3*skyMul;cx.lineCap='round';cx.beginPath();const sp=k==='storm'?1.5:1.1;
+    SC.drops.forEach(p=>{p.y+=p.v*sp*dt;p.x-=p.v*sp*dt*.14;if(p.y>1.05){p.y=-.05;p.x=Math.random()*1.1}const x=p.x*W,y=p.y*H,l=p.l*16*skyMul;cx.moveTo(x,y);cx.lineTo(x-l*.22,y+l)});cx.stroke()}
+  if(k==='snow'){cx.fillStyle='rgba(255,255,255,.9)';SC.drops.forEach(p=>{p.y+=p.v*.11*dt;if(p.y>1.05){p.y=-.05;p.x=Math.random()}cx.beginPath();cx.arc((p.x+Math.sin(SC.t*.8+p.ph)*.012)*W,p.y*H,(1.2+p.l*1.6)*skyMul,0,6.29);cx.fill()})}
+  if(k==='storm'){
+    SC.next-=dt;if(SC.next<=0||once){SC.flash=1;SC.bolt=mkBolt();SC.next=2.2+Math.random()*3.5}
+    if(SC.flash>0){if(SC.bolt&&SC.flash>.35){cx.save();cx.shadowColor='#BFD4FF';cx.shadowBlur=22*skyMul;cx.strokeStyle='#FFFFFF';cx.lineWidth=2.6*skyMul;cx.lineJoin='round';cx.beginPath();SC.bolt.forEach(([x,y],i)=>i?cx.lineTo(x,y):cx.moveTo(x,y));cx.stroke();cx.restore()}
+      cx.fillStyle=`rgba(225,235,255,${SC.flash*.3})`;cx.fillRect(0,0,W,H);SC.flash-=dt*(once?0:2.4)}
+  }
+  if(SC.prev&&!once){cx.save();cx.setTransform(1,0,0,1,0,0);cx.globalAlpha=Math.max(0,SC.fade);cx.drawImage(SC.prev,0,0,cv.width,cv.height);cx.restore();SC.fade-=dt*1.1;if(SC.fade<=0)SC.prev=null}
+  if(!still&&!once)requestAnimationFrame(frame);
+}
+
+/* ---------- yağış radarı (Leaflet + RainViewer) ---------- */
+const RD={map:null,base:null,marker:null,frames:[],layers:[],host:'',i:0,timer:null,state:'idle'};
+const isDark=()=>{const a=document.documentElement.getAttribute('data-theme');return a?a==='dark':matchMedia('(prefers-color-scheme: dark)').matches};
+const baseUrl=()=>`https://{s}.basemaps.cartocdn.com/${isDark()?'dark_all':'light_all'}/{z}/{x}/{y}{r}.png`;
+const PLAY_I='<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',PAUSE_I='<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+function mapMsg(kind){const m=$('#mapMsg');RD.msg=kind;if(!kind){m.hidden=true;return}
+  m.hidden=false;m.innerHTML=`<div><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg><b></b><span></span></div>`;
+  m.querySelector('b').textContent=t(kind==='off'?'mapOffB':'mapErrB');m.querySelector('span').textContent=t(kind==='off'?'mapOffT':'mapErrT')}
+function initMap(){
+  if(RD.map||typeof L==='undefined')return!!RD.map;
+  const c=S.city;
+  RD.map=L.map('map',{scrollWheelZoom:false,minZoom:3,maxZoom:10,worldCopyJump:true}).setView([c.lat,c.lon],6);
+  RD.map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+  RD.base=L.tileLayer(baseUrl(),{subdomains:'abcd',maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'}).addTo(RD.map);
+  RD.marker=L.circleMarker([c.lat,c.lon],{radius:7,color:'#FFFFFF',weight:2.5,fillColor:'#2466E0',fillOpacity:1}).addTo(RD.map);
+  return true;
+}
+async function radarFocus(){
+  if(!S.city)return;
+  if(S.live===false){mapMsg('off');if(initMap()){RD.map.setView([S.city.lat,S.city.lon],6);RD.marker.setLatLng([S.city.lat,S.city.lon])}return}
+  if(!initMap()){mapMsg('err');return}
+  RD.map.setView([S.city.lat,S.city.lon],RD.map.getZoom());RD.marker.setLatLng([S.city.lat,S.city.lon]);
+  if(RD.state!=='idle')return;
+  RD.state='loading';
+  try{
+    const j=await getJSON('https://api.rainviewer.com/public/weather-maps.json');
+    const past=(j.radar&&j.radar.past)||[];if(!past.length)throw new Error('empty');
+    RD.host=j.host;RD.frames=past.filter((f,i)=>(past.length-1-i)%2===0); // 20 dakikada bir kare: daha az istek
+    const sl=$('#rslider');sl.max=RD.frames.length-1;sl.disabled=false;$('#play').disabled=false;
+    RD.state='ready';mapMsg(null);showFrame(RD.frames.length-1);
+  }catch(e){RD.state='idle';mapMsg('err')}
+}
+function showFrame(i){
+  RD.i=i;const f=RD.frames[i];if(!f)return;
+  if(!RD.layers[i])RD.layers[i]=L.tileLayer(`${RD.host}${f.path}/512/{z}/{x}/{y}/2/1_1.png`,{tileSize:512,zoomOffset:-1,maxNativeZoom:8,maxZoom:10,opacity:0,zIndex:10,attribution:'<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>'}).addTo(RD.map);
+  RD.layers.forEach((l,j)=>l&&l.setOpacity(j===i?.8:0));
+  $('#rslider').value=i;$('#rtime').textContent=hm(f.time*1000+(S.data?S.data.off:0));
+}
+function setPlay(on){
+  clearInterval(RD.timer);RD.timer=null;
+  if(on){RD.timer=setInterval(()=>showFrame((RD.i+1)%RD.frames.length),900)}
+  playBtn();
+}
+function playBtn(){const b=$('#play');b.innerHTML=RD.timer?PAUSE_I:PLAY_I;b.setAttribute('aria-label',t(RD.timer?'pause':'play'));b.title=b.getAttribute('aria-label')}
+$('#play').addEventListener('click',()=>setPlay(!RD.timer));
+$('#rslider').addEventListener('input',e=>{setPlay(false);showFrame(+e.target.value)});
+const darkMQ=matchMedia('(prefers-color-scheme: dark)');
+const reTheme=()=>{if(RD.base)RD.base.setUrl(baseUrl())};
+darkMQ.addEventListener&&darkMQ.addEventListener('change',reTheme);
+new MutationObserver(reTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- dünya küresi (three.js + Open-Meteo dünya ızgarası) ---------- */
+const GEO={"coast":"-596,-800,-3,-5,-3,-5,-21,1,-22,0,-12,3,0,1,-6,2,23,0,21,-1,8,4,5,4,10,-4;-1592,-795,-19,-1,-13,3,-6,4,-1,0,-6,3,6,4,19,-2,10,-3,7,-3,3,-5;-452,-780,13,-5,4,-6,1,-4,1,-5,-16,-3,-16,-3,-19,-2,-21,-2,-24,0,-13,4,2,4,21,3,9,3,6,4,5,4,6,3,6,5,5,0,15,2,15,-2;-1212,-735,13,-2,12,2,-6,-3,-9,-3,-14,1,-10,3,2,4,12,-2;-1256,-735,16,-4,-6,1,-13,1,-14,2,7,3,10,-3;-990,-719,11,-2,11,1,6,-5,-8,1,-12,-1,-12,1,-14,-1,-10,2,-5,4,6,2,13,-2,14,0;-685,-710,2,-4,-2,-4,-3,-4,-12,-1,-11,-2,-13,0,5,4,-12,-1,-11,-2,-8,3,0,4,11,4,7,1,11,0,3,5,1,4,0,8,5,5,9,1,6,-4,2,-3,4,-5,4,-4,2,-5;-1800,-847,1,0,8,6,18,-4,2,1,2,1,4,1,3,1,1,0,2,0,1,0,14,-4,13,4,2,0,29,2,10,-2,5,-1,15,-4,28,-2,23,-3,38,-3,29,3,43,-2,24,-3,26,3,28,3,2,4,-39,1,-33,2,-8,4,-27,2,2,5,4,4,3,3,-2,5,-16,2,-8,4,-15,3,24,-1,23,2,15,-3,17,3,17,3,8,4,-4,4,-13,2,-14,3,-21,1,-18,1,-19,1,-7,4,-13,3,-8,4,-3,11,5,-1,9,-3,17,1,16,1,8,-4,16,1,13,2,13,3,11,3,15,1,0,4,-4,4,3,3,13,2,6,-3,15,2,12,2,14,0,13,1,14,3,11,2,12,2,8,-1,7,0,14,1,14,-2,13,0,14,2,13,-1,15,-1,14,0,14,0,15,0,14,0,10,3,12,2,13,-2,12,1,11,4,6,-3,4,-4,6,-3,10,3,12,-4,14,-1,11,-3,15,1,12,2,15,-1,14,-1,14,-2,5,4,-7,4,-5,3,-12,1,-6,4,-2,3,-4,8,8,-2,13,0,13,0,12,-1,10,-3,4,-4,14,0,13,1,13,2,13,1,10,-2,13,1,9,7,8,-4,11,-2,13,1,8,-4,13,0,12,-1,12,-3,8,4,4,4,10,-4,14,1,10,-2,7,-4,13,1,10,2,11,3,12,1,14,2,13,1,9,2,6,3,3,5,-2,4,-3,4,-3,3,-3,4,-3,4,0,4,1,4,4,3,4,5,2,3,-2,5,-1,4,4,4,6,3,6,4,7,3,8,3,4,4,6,3,6,3,10,0,6,3,7,2,8,1,7,3,6,3,8,1,6,-2,-4,-4,-10,-3,-4,-2,-8,2,-8,-1,-7,-2,-7,-3,-5,-3,-1,-4,0,-4,5,-3,-7,-2,-9,-1,-6,-3,-6,-3,-6,-5,-2,-4,4,-4,5,-3,8,-2,8,-3,4,-4,2,-4,3,-4,5,-3,3,-4,1,-9,3,-4,1,-4,3,-4,-1,-5,-6,-4,-6,-3,-13,-2,-4,-3,-7,-4,-15,-3,-13,-2,-12,-2,-14,-2,-8,-4,-16,-1,-18,1,-16,-1,-16,0,3,-4,15,-2,11,-3,6,-3,-11,-3,-17,1,-14,-3,-1,-4,0,-4,12,-3,2,-4,12,-4,22,-1,18,-3,14,-3,18,-3,25,-2,24,-2,17,-3,19,-4,10,-4,5,-4,12,3,16,3,18,3,21,3,17,3,25,0,25,-1,20,-3,6,4,14,3,26,1,19,2,19,2,21,1,22,2,15,3,-7,3,-4,4,0,3,-19,0,-21,-2,-19,0,-3,4,1,8,5,2,14,2,17,2,12,3,12,3,9,4,14,2,13,1,7,1,16,1,14,1,13,2,12,2,11,3,14,3,9,3,9,3,3,4,-11,2,4,4,7,4,10,1,11,3,10,3,8,4,5,5,7,2,12,0,5,-4,12,0,0,4,5,4,11,-1,3,-4,12,-1,13,2,12,1,11,0,5,-4,11,3,10,2,11,1,11,1,11,3,11,1,8,3,6,3,8,-2,10,1,8,-5,5,-3,12,2,4,4,10,2,13,0,4,-4,8,4,11,1,12,0,11,0,11,-1,11,-1,4,-3,7,-3,11,2,11,0,12,0,11,0,10,2,11,1,8,3,10,1,10,1,8,3,5,6,6,3,10,-2,4,-3,9,-2,10,0,7,-3,7,-3,11,3,3,4,9,2,11,3,9,1,12,2,8,2,8,3,8,2,9,-1,9,3,7,3,9,0,9,2,1,4,9,3,8,1,10,2,9,1,9,-1,10,-1,8,-2,1,-5,8,-3,6,-3,12,-1,7,-3,8,-3,10,0,8,2,9,4,9,-2,10,-1,9,-2,10,0,10,0,8,-11,0,-2,-1,-5,-10,-2,-8,-4,1,-4,12,0,-2,-4,-5,-3,-5,-5,8,-3,12,-1,11,2,6,4,3,4,6,3,6,3,2,3,6,5,6,1,11,1,10,1,10,1,5,4,3,4,7,4,10,2,8,2,6,4,6,1,7,2,10,-1,9,1,10,1,11,0,7,2,5,7,4,-3,4,-5,9,-1,9,-1,10,1,10,-1,9,0,7,1,8,-1,8,-2,9,2,11,0,9,1,10,-1,7,3,5,3,7,3,12,7,7,-1,7,-3,7,-3,13,-6,10,-1,9,0,11,2,10,1,9,3,6,3,12,0,7,2,8,-2,5,-3,7,-3,11,0,7,-2,12,-3,12,-1,11,1,8,3,6,3,9,1,9,-1,11,-1,9,1,9,0,9,-1,9,-1,9,2,11,2,10,0,11,0,10,1,9,1,2,5,1,4,6,-3,2,-4,3,-4,4,-4,9,-2,11,1,13,0,9,1,13,0,10,0,13,0,11,-1,7,-3,-2,-4,6,-3,11,-2,11,-3,13,-2,14,-1,10,-2,11,0,7,3,9,-2,7,-3,9,-3,12,-1,12,-1,5,-4,11,-2,8,-4,11,-1,11,0,11,-1,12,0,12,0,11,-2,11,-2,10,-2,7,-3,-1,-4,-5,-3,-5,-5,-3,-3,-5,-5,-13,-1,-6,-4,-13,-2,-5,-4,-6,-3,-8,-4,-4,-4,-2,-3,-1,-5,0,-4,6,-4,2,-3,4,-4,19,-1,4,-5,-18,-1,-15,-2,-19,-1,-9,-5,-2,-5,-4,-4,-5,-3,13,-4,5,-4,9,-4,12,-3,14,-3,15,-3,23,-3,5,-5,29,-2,2,-1,7,-3,28,2,23,-3,-3583,-2;-678,-538,13,-7,14,-2,-4,-5,-10,0,-5,3,-3,-4,-8,-3,-11,1,-8,3,-10,1,-13,6,-10,5,-14,12,9,-2,14,-7,13,-4,5,5,3,7,10,4,7,-1,3,-5,5,-7;-585,-511,8,-4,-3,-4,-14,-3,-4,4,-9,-5,-5,5,12,5,8,-2,7,4;703,-497,-16,-1,0,6,2,4,0,2,7,-3,9,-2,1,-2,-3,-4;1454,-408,10,-3,5,1,8,2,6,-1,1,-12,-4,-3,-1,-8,-3,3,-7,-7,-2,0,-7,1,-6,8,-1,7,-6,8,0,5,7,-1;1730,-409,2,-4,8,4,2,-4,0,-5,-3,-4,-7,-8,-5,-4,4,-5,-8,0,-8,-3,-3,-7,-6,-10,-8,-5,-5,-2,-9,0,-6,3,-11,1,-2,3,5,8,13,10,6,2,8,3,8,6,6,5,5,7,4,3,1,5,7,5,2,-4;1746,-362,7,-10,1,7,4,-3,2,-8,8,-3,6,-1,6,4,5,-1,-2,-9,-3,-6,-8,1,-3,-3,1,-5,-1,-2,-4,-5,-5,-7,-8,-4,-1,3,-4,1,5,8,-3,6,-11,4,1,4,7,3,1,8,0,6,-4,7,0,2,-5,4,-7,9,-5,7,4,0,6,-5,7,-3,3,-9;1671,-222,-4,-2,-5,3,-7,4,-7,6,-6,7,-2,3,5,0,5,-4,5,-3,3,-3,8,-6,5,-5;1784,-173,3,-3,-1,-6,-7,-1,-5,1,-1,5,4,3,4,-1,3,2;-1800,-166,3594,-2,-7,-2,-1,4,5,2,3,0,-3594,3,2,1,-1,-5,-1,-1;1678,-165,-3,-1,-3,4,0,3,6,-6;1671,-149,2,-8,-3,1,-2,-1,-1,3,-1,8,5,-3;501,-136,1,-12,3,-4,-1,-5,-2,-3,-3,6,-2,-3,2,-8,-1,-4,-3,-2,-1,-9,-4,-11,-5,-14,-6,-19,-4,-14,-4,-11,-8,-3,-9,-4,-6,3,-8,3,-2,5,-1,9,-4,8,0,7,1,8,5,1,0,4,5,7,1,7,-3,4,-2,7,0,9,3,5,1,7,5,0,6,2,4,2,4,0,6,6,8,6,3,5,-1,4,4,-1,5,7,1,6,3,5,3,-5,3,-4,3,-7;1436,-138,3,-7,7,3,3,-4,5,-4,-1,-4,2,-9,1,-5,3,-1,3,-9,-1,-5,3,-7,11,-5,7,-5,6,-4,-1,-2,6,-7,4,-10,4,2,4,-5,2,2,2,-11,7,-6,5,-4,8,-8,2,-8,1,-5,-1,-7,5,-8,-1,-9,-2,-5,-2,-9,0,-5,-2,-7,-5,-10,-7,-4,-4,-8,-3,-5,-3,-9,-4,-5,-2,-7,-2,-7,1,-3,-6,-4,-11,0,-9,-4,-5,-4,-6,-4,-8,4,-6,2,1,5,-5,-2,-9,-7,-9,3,-5,1,-6,1,-10,3,-6,6,-2,8,-2,5,-5,4,-10,1,3,5,-2,7,-5,-7,-9,-2,6,6,1,6,4,5,-1,7,-8,-9,-6,-3,-4,-8,-8,4,0,6,-6,7,-5,4,2,2,-13,6,-7,0,-10,5,-18,-1,-13,-3,-11,-4,-10,1,-10,-5,-9,-3,-2,-5,-3,-4,-9,0,-6,-1,-9,2,-7,-1,-7,-1,-6,-5,-3,0,-5,-2,-5,-4,-7,1,-7,0,-10,6,-6,2,0,6,5,1,2,2,0,4,1,7,-1,6,-5,10,-2,6,0,5,-4,7,0,3,-4,4,-2,8,-5,8,-2,4,5,-4,-4,9,5,-3,3,-4,0,5,-5,8,-1,3,-2,3,1,6,2,2,1,5,-1,6,4,7,1,-7,4,7,9,3,4,4,8,4,5,1,2,-1,8,3,6,1,2,3,3,0,5,0,11,3,5,5,3,5,5,5,1,4,0,5,7,9,4,-9,5,2,-4,5,3,5,5,-2,1,7,5,5,3,4,5,2,0,3,4,-1,0,2,5,1,5,2,7,-5,6,-6,6,0,6,-1,-2,6,5,8,4,2,-1,3,4,6,6,3,5,-1,9,2,0,5,-8,3,6,2,6,-3,6,-4,8,-2,3,1,6,-3,6,2,4,0,2,1,5,-5,-3,-5,-4,-4,-3,0,1,-4,-3,-5,-4,-5,1,-3,8,-6,8,-3,5,-3,7,-6,3,0,5,-3,2,-3,9,-3,7,3,2,6,2,4,1,6,3,8,-1,4,0,3,-1,6,2,8,1,2,-1,3,2,5,2,6,0,3,4,3,3,-5,1,-6,2,-1,1,-4,3,-5,1,-6,0,-4;1621,-105,3,-3,-7,0,-4,6,6,-2,2,-1;1207,-102,-4,-1,-13,7,9,2,5,-3,4,-3,-1,-2;1609,-99,-4,0,-6,1,-3,2,1,4,7,-2,3,-2,2,-3;1617,-96,-2,-2,-7,9,-2,6,3,0,4,-8,4,-5;1244,-101,-8,-3,-1,2,1,3,4,6,10,4,1,2,8,3,7,0,4,1,3,-1,-3,-3,-11,-4,-8,-3,-7,-7;1179,-81,4,-3,6,1,2,-4,-11,-2,-7,-1,-6,0,4,5,5,1,3,3;1229,-81,-1,-6,-15,-2,-14,1,0,4,8,2,6,-3,7,0,9,4;1599,-83,0,-2,-8,4,-5,3,-4,4,2,1,4,-3,8,-4,3,-3;1575,-73,-2,-1,-4,2,-4,4,0,2,6,-4,4,-3;1086,-68,19,-1,3,4,18,-4,4,-7,15,-2,12,-6,-11,-4,-11,5,-9,-1,-11,1,-9,2,-12,4,-7,1,-4,-2,-18,4,-2,5,-9,0,7,10,12,-1,8,-3,4,-1,1,-4;1347,-62,-5,-7,-1,8,2,3,2,4,2,-3,0,-5;1559,-68,-3,-1,-4,4,-5,6,-2,8,2,1,1,-3,3,-3,4,-6,5,-3,-1,-3;1520,-55,-5,-1,-2,-2,-5,-3,-6,-2,-5,0,-8,3,-6,3,1,3,9,-2,5,1,2,5,1,0,1,-5,6,0,3,4,5,3,-1,6,6,1,2,-2,0,-6,-3,-6;1272,-35,-3,-3,-7,2,-2,4,10,1,2,-4;1305,-31,3,-8,-8,5,-8,0,-6,0,-7,0,2,6,13,0,11,-3;1531,-45,-3,-3,-2,6,-2,4,-4,3,-6,5,-7,3,2,2,6,-3,3,-2,4,-2,4,-5,4,-3,1,-5;1341,-12,3,-16,11,-6,8,11,11,6,9,0,9,-4,7,-3,11,-2,17,-7,19,-6,7,-5,5,-5,2,-6,16,-6,3,-5,-9,-1,2,-7,9,-6,6,-11,6,0,0,-4,7,-2,-3,-2,11,-4,-1,-3,-7,-1,-2,3,-9,1,-10,2,-8,6,-5,6,-6,8,-13,5,-8,-3,-6,-3,1,-8,-8,-3,-5,1,-11,1,-9,8,-10,2,-2,-3,-13,0,4,8,7,3,-3,11,-5,8,-19,9,-8,0,-15,10,-3,-5,-4,-1,-2,4,0,4,-8,5,11,3,7,0,-1,3,-15,0,-4,6,-9,2,-4,5,14,2,5,3,16,-4,1,-4;1252,14,-8,-10,-7,-2,-10,2,-16,0,-9,-2,-2,-7,9,-9,6,4,18,4,0,-5,-5,2,-4,-6,-9,-4,10,-13,-2,-3,9,-12,0,-6,-6,-3,-4,3,5,8,-10,-4,-2,3,1,4,-7,6,1,10,-7,-3,1,-12,0,-14,-6,-2,-4,3,3,9,-2,10,-4,0,-3,7,4,7,1,7,5,16,2,4,9,7,8,-3,12,-1,12,0,10,7,1,-2;1287,11,-1,-8,-5,1,-1,-7,4,-5,-3,-1,-4,6,-3,13,2,8,3,4,1,-6,6,-1,1,-4;1058,-59,-11,0,-8,9,-13,8,-4,6,-8,8,-5,7,-8,14,-8,9,-3,8,-4,8,-9,7,-5,8,-8,6,-10,11,-1,5,6,-1,16,-2,9,-9,7,-7,6,-4,9,-11,11,0,8,-7,6,-8,7,-5,-4,-8,6,-4,4,0,1,-7,4,-5,7,-1,5,-7,-2,-12,-1,-16;1179,18,11,-9,-12,-1,-3,-7,0,-9,-9,-7,-1,-10,-4,-15,-1,3,-11,-4,-4,6,-7,1,-5,3,-12,-4,-4,5,-7,0,-8,1,-1,13,-5,3,-5,8,-1,9,1,9,6,7,7,-3,8,2,2,8,4,2,12,2,7,8,5,6,4,4,9,5,7,7,5,8,4,0,5,-5,1,-4,6,-3,9,-3,-1,-4,-7,0,2,-5,-7,-4,-6,-9,7,-9,-1,-5;1264,84,1,-6,0,-6,-3,-9,-4,10,-4,-5,3,-8,-3,-4,-12,6,-3,7,3,5,-6,4,-3,-4,-5,1,-7,-6,-2,3,4,8,6,3,6,4,3,-5,8,3,2,5,7,0,-1,8,8,-5,1,-5,1,-4;812,62,-9,-2,-4,8,-2,14,4,16,7,-5,5,-7,5,-11,-2,-10,-4,-3;-609,101,-9,-1,-2,1,3,3,0,4,6,1,2,0,0,-8;1240,103,-4,-4,-3,-6,-3,-3,-6,7,2,3,2,3,1,6,6,0,-2,-6,8,9,-1,-9;1185,93,-13,-9,5,7,7,6,6,7,5,10,2,-8,-7,-6,-5,-7;1219,119,6,-3,6,0,0,-4,-5,-5,-6,-3,0,5,0,5,-1,5;1255,122,3,-12,-8,3,0,-3,3,-6,-5,-3,0,7,-3,1,-2,6,6,-1,0,4,-6,8,9,-1,3,-3;1215,131,-2,-9,-5,5,-5,8,9,-1,3,-3;1213,185,6,-3,3,3,1,-3,-1,-4,3,-7,-2,-8,-6,-4,-2,-8,2,-8,6,-1,4,1,13,-5,-1,-6,3,-2,-1,-5,-8,5,-4,6,-2,-4,-7,6,-9,-2,-5,3,1,4,3,2,-3,3,-1,-4,-5,6,-2,4,0,10,4,-4,1,16,3,9,6,0;-656,182,-2,-2,-8,0,-6,-1,0,5,1,1,8,0,5,-1,2,-2;-769,179,-3,-2,-6,2,-5,3,1,3,4,0,2,0,7,-1,5,-2,2,-3,-7,0;-726,199,9,-2,1,2,8,0,6,-3,2,0,2,-3,6,0,-1,-3,5,0,5,-4,-4,-4,-5,2,-4,0,-4,0,-1,-2,-4,0,-2,2,-3,-1,-4,-7,-3,2,0,2,-7,2,-4,-1,-7,1,-4,-2,-6,3,1,4,10,-2,7,-1,4,3,-5,4,0,4,-6,1,2,3,6,0;1103,187,-8,-5,-8,3,-1,9,5,4,11,3,6,0,2,-4,-4,-4,-3,-6;-1555,191,-2,-2,-2,2,0,2,-2,4,1,1,1,2,0,2,0,1,1,-1,4,-1,2,-1,1,-1,3,-4,0,0,-4,-3,-3,-1;-1561,206,-3,0,-2,2,-1,1,0,0,1,1,3,-1,3,-1,-1,-2;-1568,212,0,-1,-5,0,0,1,5,0;-1577,213,0,0,-1,0,-3,0,-2,2,0,1,3,1,1,0,2,-4;-1593,220,-2,-1,-3,2,1,0,1,1,2,0,1,-2;-797,228,4,-4,10,1,3,-2,9,-6,6,-5,3,0,6,-2,-1,-3,8,0,7,-4,-1,-2,-7,-2,-6,0,-7,1,-15,-1,7,5,-4,3,-6,0,-4,3,-2,6,-6,0,-9,2,-3,2,-13,2,-4,2,4,2,-10,1,-7,-5,-4,0,-2,-3,-4,-1,-5,1,6,3,2,4,4,2,5,2,8,1,2,1,9,-1,8,0,9,-3;-775,238,-3,-1,-2,6,-4,3,2,6,3,0,4,-9,0,-5;1212,228,-5,-8,-5,8,-1,8,6,9,8,8,5,-3,-2,-6,-6,-16;-778,266,-11,-2,-1,4,5,1,7,-1,0,-2;-770,266,-2,-7,-2,1,1,5,-5,4,0,1,8,-4;1346,341,2,-3,-6,-6,-4,3,-5,-2,-3,-6,-6,3,0,5,5,6,6,-2,4,5,7,-3;346,357,-7,-5,1,-1,0,-1,-10,-4,-5,1,-2,4,4,0,1,0,1,3,8,0,9,3;237,357,5,-3,8,0,8,0,-1,-2,6,1,-1,-3,-15,-1,0,2,-12,2,2,4;155,382,-3,-8,1,-3,-2,-5,-8,4,-5,1,-14,5,2,5,11,-1,11,1,7,1;92,412,6,-7,-1,-13,-5,0,-4,-3,-4,3,0,12,-2,6,5,-1,5,3;1410,371,-4,-8,2,-5,-5,-7,-13,-4,-18,-1,-14,-11,-7,3,0,8,-18,-2,-11,-5,-12,0,10,-8,-7,-16,-6,-5,-5,4,2,9,-6,3,-4,7,10,3,5,6,10,6,7,6,20,3,11,-2,10,18,7,-5,15,10,5,4,7,12,-2,12,4,6,11,2,5,-14,0,-8,-9,-10,0,-11;96,422,-4,-8,-4,2,-3,7,2,3,7,4,2,-8;1439,442,7,-2,7,4,2,-11,-14,-3,-9,-10,-16,7,-5,-11,-11,0,-2,10,5,7,11,1,3,14,3,8,11,-11,8,-3;-637,465,8,-1,9,0,-5,-4,-4,0,-12,4,-3,3,4,3,3,-5;-618,491,-5,0,-13,3,-9,5,3,1,13,-3,11,-4,0,-2;-1235,485,-5,-1,-17,4,-3,4,-8,3,-2,3,-11,2,-3,5,0,3,11,-2,6,-2,9,-1,4,-4,5,-4,10,-4,4,-6;-561,507,-7,-9,7,3,6,-2,-3,-3,9,-3,4,3,10,-4,-3,-7,7,2,1,-5,4,-7,-5,-8,-4,-1,-7,2,2,8,-2,2,-12,-9,-6,0,7,5,-10,2,-10,0,-20,0,-1,3,6,4,-4,2,8,6,10,16,7,6,8,3,5,0,-2,-3,-5,-6;-1327,540,10,1,-4,-11,9,-8,-4,0,-6,4,-4,5,-5,3,-1,5,0,3,5,-2;1436,507,11,-17,-15,3,-6,-14,9,-11,0,-7,-8,6,-6,-7,-2,8,1,10,-1,11,2,7,1,14,-6,9,1,14,9,5,-4,4,5,2,2,-7,4,-10,-1,-9,4,-11;-68,523,-18,-6,-14,1,8,11,-5,10,14,8,7,4,9,1,10,-6,-5,-7,2,-7,-8,-9;127,556,-6,-8,-11,6,-1,4,15,3,3,-5;-1530,571,-10,-4,-5,3,-2,5,9,3,6,2,6,-1,5,-3,-9,-5;-30,586,-11,-10,10,1,11,0,-2,-8,-9,-9,10,-1,10,-13,7,-1,6,-12,3,-4,12,-2,-1,-6,-6,-3,4,-5,-9,-5,-13,0,-17,-3,-5,2,-6,-5,-9,1,-7,-3,-6,2,15,10,9,2,-16,2,-3,4,11,3,-6,5,2,7,15,-1,2,6,-7,6,-12,2,-3,3,4,4,-3,3,-6,-5,0,10,-6,5,4,10,8,8,8,0,12,0;-1656,599,-6,-1,-6,1,-7,3,10,2,8,-1,1,-4;-793,622,-4,-6,-4,1,-3,3,1,1,4,3,4,0,2,-2;-819,627,-12,-5,-7,0,-2,3,8,4,13,0,0,-2;-1717,638,6,-2,6,1,8,-3,10,-1,-1,-1,-7,-2,-8,2,-4,2,-9,-1,-2,1,1,4;-852,657,2,-5,5,2,6,-3,11,-3,12,-3,0,-5,8,1,7,-4,-9,-3,-15,3,-6,4,-10,-5,-14,-5,-4,5,-13,-1,8,5,2,8,3,9,7,0;-145,665,-2,-7,11,-7,-13,-7,-29,-7,-9,-2,-13,1,-28,4,10,4,-22,5,18,2,0,3,-21,2,6,7,16,1,15,-7,15,6,13,-3,16,5,17,0;-759,671,-11,0,-2,5,4,5,9,2,8,-3,0,-4,-1,-2,-7,-3;-956,691,-7,-3,-13,3,-8,-1,-14,4,9,3,7,4,10,-2,6,-2,3,-2,7,-4;-1800,715,3600,-7,-11,0,-2,3,-3587,4,1,1,9,0,14,-3,-1,-2,-10,-2,-13,-1,0,7;-905,695,0,-10,13,8,12,-7,-3,-7,10,-7,10,7,7,9,1,11,14,-1,15,-1,13,-5,1,-5,-8,-6,7,-5,-1,-5,-19,-7,-14,-1,-11,3,-3,-5,-9,-9,-3,-4,-12,-7,-14,-1,-8,-4,-1,-6,-11,-2,-13,-8,-10,-11,-4,-8,-1,-12,15,-1,4,-10,5,-7,14,2,19,-4,10,-4,7,-5,12,-3,11,-4,16,-1,11,-1,-1,-8,3,-10,7,-11,15,-10,8,3,5,11,-5,15,-7,6,16,4,11,7,6,7,-1,7,-7,9,-12,7,12,11,-5,9,-3,15,7,3,17,-3,10,-1,9,2,9,-3,12,-6,3,-4,18,0,0,-9,3,-12,9,-2,7,-6,15,6,10,11,6,4,8,-9,13,-12,11,-12,-4,-7,13,-5,9,-6,16,-3,7,-3,4,-8,7,-2,4,-3,1,-12,-7,-3,-7,-4,-17,-3,-12,-9,-17,-1,-22,2,-15,0,-10,-1,-8,-7,-13,-4,-15,-14,-11,-9,8,2,16,13,21,8,15,1,9,-5,-9,-6,3,-11,3,-8,13,-5,17,2,10,11,0,-7,7,-4,-12,-6,-23,-6,-9,-4,-12,-8,-7,1,-1,9,18,8,-16,0,-11,-2,1,-3,-10,-5,-11,-3,-10,-3,-6,-7,-1,-1,0,-6,3,-5,4,0,-1,3,3,-2,-1,-3,-6,-1,-5,0,-8,-2,-4,0,-6,-1,-8,-3,15,2,3,-2,-14,-3,-7,0,0,2,-3,-3,3,-1,-2,-7,-7,-8,-1,3,-2,0,-3,3,2,-5,2,-2,0,-4,-3,-4,-5,-8,-1,1,3,6,-5,4,-2,8,-1,-4,2,-6,-7,1,7,-3,0,-9,3,-1,1,-3,2,-10,-7,-8,-10,-3,-7,-6,-5,0,-5,-4,-1,-3,-11,-7,-6,-5,-4,-6,-2,-7,2,-7,3,-8,5,-7,0,-5,4,-11,0,-7,0,-4,-3,-6,-3,-1,-5,1,-1,4,-4,3,-5,8,-5,8,-2,4,2,7,-2,5,-8,8,-4,2,-10,-5,-2,1,-5,5,-6,2,-11,-1,-9,1,-8,-1,-4,-1,2,-3,0,-4,2,-2,-2,-1,-4,1,-4,-2,-7,0,-7,6,-9,-1,-7,2,-6,-1,-9,-2,-9,-8,-10,-4,-5,-5,-3,-4,0,-7,1,-5,2,-3,0,0,0,0,-4,-9,-2,-7,-1,-14,-1,-5,2,-5,3,-5,2,-8,7,-7,2,-6,4,-5,11,-2,4,-5,9,3,7,1,8,2,6,2,6,4,3,6,0,8,2,3,7,3,11,2,8,0,6,0,3,-2,0,-5,-6,-5,-2,-7,2,-1,-2,-5,-2,-7,-3,2,-2,0,0,-1,2,-1,0,-2,-2,-5,1,-1,-1,-4,1,-1,-2,-5,-2,-2,-1,-1,-2,-3,3,-2,1,2,3,-2,1,0,2,2,3,0,1,-1,1,0,5,0,5,0,3,1,1,1,3,0,3,-1,2,0,2,1,5,-1,1,-1,3,-2,3,-2,4,-1,3,-3,-1,-1,-1,-2,1,-4,-2,-3,-1,-4,-1,-5,1,-2,0,-5,-1,-1,-1,-4,0,-3,-2,-2,1,-3,1,-2,3,-5,4,-4,5,-4,3,-4,0,-2,4,0,1,0,3,-2,5,1,4,2,6,2,3,3,6,0,-1,-1,6,-1,4,-2,4,-3,3,-2,6,-1,7,7,4,1,0,4,2,8,6,5,6,0,1,2,8,-1,8,5,4,3,4,4,4,0,3,-3,-2,-3,-1,-3,-5,-1,3,-4,0,-6,-5,-5,4,-8,4,0,3,8,-4,3,0,8,12,4,-1,4,4,4,3,-7,7,-1,7,-5,0,-3,9,-1,11,1,5,-4,8,-1,6,3,0,2,12,1,12,0,-8,-3,3,-5,8,0,8,-5,1,-8,5,0,4,-2,7,-4,6,-7,0,-5,4,0,6,-5,4,-3,12,-2,1,2,8,0,10,-2,4,-2,7,-2,11,-8,1,-4,4,0,2,-6,6,-17,5,-2,1,-7,-8,-8,3,-3,18,-1,0,-10,8,6,12,-3,17,-7,5,-5,-2,-6,12,3,19,-5,15,0,15,-8,13,-11,7,-3,9,0,4,-4,3,-12,2,-6,-4,-17,-5,-6,-14,-14,-7,-12,-7,-8,-3,-1,-3,-7,1,-19,-3,-15,-1,-7,-3,-4,-2,-13,-10,-13,-1,-10,-9,-5,-2,-6,-11,0,-15,-4,-8,-4,-11,-3,-11,-8,-9,-10,-1,-7,1,-6,-2,-10,-2,-5,-7,-5,-11,-18,-9,-8,-7,-4,-4,-10,-7,-6,-4,-6,-11,-6,-8,2,-5,-1,-9,5,-7,-1,-6,6,-1,-5,13,-9,-2,-7,7,-4,-1,-5,-9,-13,-15,-5,-20,-2,-11,1,2,-6,-2,-8,2,-5,-6,-3,-11,-2,-9,4,-4,-3,1,-10,7,-3,5,4,3,-6,-9,-3,-8,-6,-1,-10,-3,-5,-9,0,-8,-6,-3,-7,10,-7,10,-2,-4,-9,-12,-6,-6,-12,-9,-4,-4,-4,3,-11,6,-6,-4,1,-9,0,-4,-2,-9,-4,-2,-9,-4,-1,-12,4,-11,7,-12,5,-4,7,3,6,-5,6,-1,17,4,10,11,8,-15,3,9,8,3,17,12,-4,5,21,-7,3,-3,-13,-6,2,3,14,3,19,5,6,-3,10,-1,11,4,1,6,16,7,16,5,15,-3,15,3,8,-1,12,6,13,2,19,3,21,3,22,-1,16,-2,15,-10,5,-1,4,-19,10,-18,11,-8,7,-4,8,1,3,-8,13,-10,18,-9,20,-4,5,-4,7,-7,7,-8,4,4,4,-5,10,3,7,8,6,5,7,-2,5,-4,-5,-6,5,2,2,-1,9,3,2,2,6,4,7,-1,4,6,2,6,4,-1,3,4,1,-1,5,3,3,5,1,4,6,4,5,-4,3,2,6,-2,9,2,2,-2,9,-4,5,-3,3,-2,6,2,2,-2,1,-2,3,-5,3,-5,-1,-2,-3,-4,-3,-2,0,-1,-2,5,-6,-3,-1,-1,-1,-5,-1,-2,6,-1,-2,-3,1,-2,4,-4,1,-3,1,-4,0,0,-2,-2,1,-5,2,-2,3,1,1,0,3,-3,2,-4,2,-3,1,-1,3,-3,2,1,-3,-2,-2,-2,2,-4,1,-1,2,0,3,1,4,-2,1,2,2,-4,3,-4,4,-2,3,-5,4,-5,4,1,2,2,-2,1,1,-2,3,-3,1,-1,-3,-6,1,-3,1,-5,2,-5,0,-3,2,-5,2,-6,0,-5,2,-5,4,-12,11,-5,3,-8,3,-6,-1,-8,-3,-5,-1,-7,2,-7,2,-9,5,-8,1,-11,5,-9,4,-2,3,-6,1,-10,3,-4,4,-11,6,-5,6,-2,5,3,1,-1,3,2,3,0,3,-3,5,-1,4,-3,5,-9,10,-10,7,-5,7,-9,4,-1,2,1,6,-5,3,-6,5,-2,7,-6,0,-6,6,-4,5,-1,3,-5,7,-4,8,1,4,-8,4,-3,-1,-6,3,-1,-4,1,-5,1,-7,4,-4,7,-7,2,-3,1,0,2,-4,1,0,2,-6,3,-3,3,-3,6,-5,3,-10,3,-4,3,-5,0,-5,5,0,4,-5,4,-4,0,-2,-5,-4,-1,0,-3,6,-7,6,-7,5,-5,2,0,8,-1,5,-5,3,-7,5,-1,-2,-2,3,-7,2,-6,6,1,1,4,-1,4,4,0,5,-7,7,-6,3,-4,6,-4,6,-4,8,-4,9,-2,5,-6,6,-5,1,-1,3,-6,1,-3,2,-10,1,-2,2,-1,6,-10,10,-8,14,0,2,-5,3,-7,9,-2,8,-5,5,2,8,0,9,-3,8,4,9,2,18,-2,14,-3,8,-3,5,1,2,15,-4,5,-9,3,3,-2,8,-3,8,-2,0,-19,10,-7,4,-18,4,-6,9,2,6,-13,5,-2,8,-12,7,0,5,-6,4,-9,3,-2,9,-13,8,-6,9,-9,1,-16,0,-12,3,-21,10,-9,2,-18,4,-14,-1,-19,5,-12,4,-11,-2,2,-7,-6,-1,-11,-2,-9,-3,-11,-2,-2,5,5,10,11,3,-3,3,-13,-6,-7,-6,-14,-7,7,-5,-9,-8,-11,-4,-10,-3,-3,-4,-15,-5,-3,-5,-12,-4,-7,0,-9,-2,-10,-4,-9,-3,-17,-3,-1,2,11,4,9,3,11,6,12,1,5,4,14,6,2,2,8,4,1,7,6,6,-12,-3,-3,2,-6,-4,-6,5,-3,-3,-4,5,-10,-4,-6,0,-1,6,2,3,-6,4,-13,-2,-9,5,-6,2,-1,6,-7,4,4,6,8,5,3,5,8,1,7,-1,8,4,8,0,7,3,-2,4,-5,2,7,4,-6,0,-11,-2,-3,-3,-7,3,-15,-2,-14,3,-4,4,-13,6,14,4,22,5,8,0,-1,-5,21,0,-8,6,-12,4,-7,5,-10,4,-14,4,6,5,18,0,12,5,3,5,10,4,10,1,19,5,9,-1,15,6,15,-3,8,-4,4,2,17,-1,-1,-2,16,-2,10,1,21,-3,19,-1,8,-1,13,2,15,-3,11,-2,19,-2,16,-5,10,-1,9,4,12,3,15,-1,15,4,16,3,7,-4,7,2,3,5,7,-1,16,-9,14,7,1,-8,12,2,4,3,12,-1,16,-4,23,-4,14,-2,10,1,13,-5,-14,-5,18,-2,27,1,9,2,10,-6,11,5,-10,4,6,4,12,0,9,1,8,-2,10,-6,11,1,17,-5,16,2,15,0,-2,6,9,2,16,-4,0,-9,6,8,8,0,5,10,-11,6,-12,4,1,11,12,7,13,-1,10,-5,14,-11,-9,-5,19,-2;-1142,731,-5,-4,23,3,13,-5,12,5,9,-4,8,-9,5,4,-7,10,9,1,10,-1,11,-4,6,-10,3,-7,17,-5,18,-5,-1,-4,-16,-1,6,-4,-3,-3,-18,1,-18,3,-11,-1,-19,-3,-30,-2,-13,-1,-6,5,-13,3,-9,-1,-12,8,6,1,16,1,14,0,13,2,-19,2,-22,-1,-14,0,-5,4,23,4,-16,0,-17,3,8,7,7,4,27,6,10,-2;-1045,734,-9,-6,-15,7,3,1,13,0,8,-2;-763,731,0,-3,-10,1,-11,0,-11,-2,-3,1,-11,5,1,4,4,1,23,-1,18,-6;-866,732,8,-7,9,8,26,5,17,-11,-2,-6,20,3,10,4,22,-6,14,-4,1,-5,19,3,10,-7,24,-4,9,-4,9,-9,-18,-5,23,-6,16,-3,15,-9,15,0,-3,-7,-17,-12,-12,4,-16,10,-13,-1,-1,-6,10,-6,14,-5,4,-2,6,-10,-3,-7,-13,2,-25,8,14,-8,11,-6,1,-4,-27,4,-21,6,-12,5,3,3,-15,5,-14,5,0,-3,-29,-2,-9,4,7,7,19,0,20,2,-3,3,4,5,12,10,-2,4,-4,4,-15,5,-21,3,7,2,-11,7,-9,0,-8,4,-5,-3,-18,-2,-36,3,-22,3,-16,1,-8,4,10,4,-14,0,-3,10,8,9,10,4,26,3,-8,-6;-1004,738,12,-2,18,2,3,-3,-10,-5,16,-4,-2,-9,-17,-4,-9,1,-7,3,-25,8,0,3,21,-1,-11,7,11,4;1436,732,-15,0,-21,1,-1,1,9,4,13,1,14,-4,1,-3;-932,728,-11,-8,-11,1,-6,8,0,5,5,5,10,2,21,0,19,-2,-15,-9,-12,-2;-1205,714,-26,-5,-5,4,-23,6,3,3,8,8,9,7,-10,6,34,1,14,-2,25,0,10,-3,11,-4,-13,-3,-24,-7,-13,-7,0,-4;1507,751,-11,-4,-16,1,-19,4,3,3,18,-2,25,-2;-936,750,-6,-4,-14,1,-12,2,5,5,14,2,9,-3,4,-3;1451,756,-8,-8,-37,0,-16,-2,-20,7,5,6,13,2,27,0,36,-5;-985,767,8,-4,0,-6,-5,-7,-16,-1,-11,2,0,5,-16,0,-1,7,11,0,15,3,14,0,1,1;-1082,762,4,-4,9,2,10,0,2,-5,-6,-5,-34,-1,-25,-5,-15,0,-2,3,21,5,-45,-2,-14,2,14,10,9,3,28,-4,18,-6,17,0,-14,9,9,4,10,-1,4,-5;575,707,-6,-1,-32,2,-3,4,-18,3,-1,5,10,2,-1,6,20,8,-9,2,24,8,-3,5,23,5,33,7,33,1,17,4,20,1,7,-4,-7,-3,-36,-5,-30,-4,-31,-10,-15,-10,-16,-9,2,-9,19,-8;-947,771,11,-3,20,0,9,-3,-3,-4,12,-3,6,-2,14,0,14,-1,16,2,20,1,17,-1,10,-4,3,-4,-7,-2,-14,-3,-13,2,-29,-2,-20,0,-17,1,-26,3,-4,6,-1,5,-10,4,-21,1,-11,4,4,4,20,-1;-1162,776,-1,-7,-8,-4,-9,0,-19,-4,-16,-2,-14,2,17,8,21,6,15,0,14,1;491,413,5,-7,5,-1,3,-2,-8,-1,-2,-8,-2,-4,-3,-2,0,-5,3,-7,9,-2,7,-5,15,-2,15,3,1,2,-2,7,2,11,-8,3,3,7,-7,0,2,9,10,-3,8,4,-7,6,-3,5,-8,-2,-1,-8,-3,7,-1,2,3,4,-2,4,-12,3,-4,9,-6,3,0,3,10,-1,0,7,9,2,8,-1,2,9,-2,7,-10,-1,-8,2,-12,-4,-9,-2,-5,-6,-9,-2,-10,-10,9,-9,-1,-7,11,-12,5,-5;-1800,690,25,-8,26,-10,-1,-6,7,-3,-3,8,27,-2,20,-9,-10,-5,-16,-1,-1,-9,-4,-2,-9,0,-8,3,-13,3,-2,5,-10,1,-12,-1,-5,3,2,4,-12,-2,5,-5,-6,-4,3600,0,-13,-5,-13,1,9,-5,6,-8,5,-3,1,-4,-3,-3,-18,2,-28,-7,-9,-1,-16,-8,-14,-6,-4,-4,-14,7,-26,-8,-5,4,-9,-5,-14,2,-3,-7,-12,-10,1,-4,11,-2,-1,-14,-10,-1,-4,-8,4,-4,-17,-6,-4,-11,-15,-2,-3,-11,-14,-9,-4,7,-4,15,-6,22,5,14,9,6,0,4,16,3,17,12,18,10,18,8,8,15,-12,-1,-6,-9,-26,-11,-8,13,-26,-4,-25,-16,8,-7,-22,-2,-15,-1,0,7,-15,2,-13,-5,-30,1,-33,-3,-32,-19,-39,-24,16,-1,5,-6,10,-2,6,5,11,-1,14,-11,1,-9,-8,-10,-1,-12,-4,-16,-15,-14,-4,-7,-13,-12,-14,-11,-6,-6,-14,-6,-6,0,-6,5,-14,-7,-1,-4,-4,1,-4,-4,-3,-3,0,-7,-5,-2,-2,-2,-4,-3,-6,-2,-5,-2,0,-5,-1,-1,4,-1,6,-5,8,-12,3,-6,0,-12,-4,-5,-9,-2,-8,-4,-9,-1,-1,5,2,8,-5,10,8,2,-7,8,-5,2,-1,-1,-3,-1,-1,2,-2,0,-3,2,3,4,2,2,-1,1,3,6,-1,2,-6,1,-4,2,-14,-3,-8,-4,-10,-3,5,5,-2,4,8,6,-6,5,-8,-3,-12,-7,-6,-6,-10,-1,-5,-5,6,-6,8,-2,0,-5,8,-2,11,7,9,-4,7,0,1,-6,-14,-2,-5,-6,-9,-5,-5,-7,10,-5,4,-10,6,-9,7,-8,0,-8,-6,-2,2,-6,6,-3,-2,-8,-2,-8,-6,-1,-7,-10,-8,-14,-9,-12,-14,-9,-14,-8,-11,-1,-6,-5,-4,3,-6,-4,-14,-5,-10,-2,-4,-11,-5,0,-3,7,3,4,-14,3,-5,-1,-13,-9,-8,-9,-2,-7,7,-11,10,-13,9,-6,6,-8,4,-19,-1,-17,-8,-7,-12,-6,-8,-9,-12,-9,-4,6,3,7,-8,6,-8,1,-4,6,-5,10,-9,4,-9,0,2,8,-9,0,-1,-11,-5,-15,-3,-8,0,-8,7,0,4,-9,2,-9,5,-5,6,-2,5,-5,3,-1,6,-6,4,-6,0,-7,-1,-5,1,-3,1,-6,4,-3,3,-9,0,-3,-7,-1,-9,8,-12,8,-1,5,-6,6,-1,9,-4,5,1,7,-2,5,-4,3,-2,5,-5,6,-5,5,-2,-6,-2,5,2,7,3,9,-1,8,3,7,-4,6,1,11,-4,5,-3,12,-2,13,-4,8,-7,-5,-11,-7,-6,1,-6,2,3,13,-2,9,-8,12,2,3,-6,2,-7,8,-3,5,-1,5,-2,5,-4,6,-9,0,1,-4,-3,-6,-5,2,-1,-1,-3,1,-4,1,-1,-4,-7,0,-12,-2,0,-8,-5,-5,-14,-7,-12,-12,-7,-6,-10,-7,0,-4,-5,-3,-9,-3,-5,-1,-3,-8,2,-13,1,-8,-4,-9,0,-17,-6,-1,-4,-8,3,-3,-9,-3,-4,-6,-4,-3,-9,9,-5,14,-4,10,-3,5,-5,9,-3,13,-2,6,-9,14,-4,19,-3,13,0,12,-2,10,-14,-6,-7,1,-13,12,4,4,-3,3,-11,9,-8,2,-3,8,-7,7,-19,-2,-16,0,-14,-1,-19,3,-11,2,-11,1,-4,13,-5,1,-8,-1,-10,-5,-12,3,-10,8,-10,3,-6,9,-8,13,-5,-1,-7,3,-3,-4,-6,1,2,-5,-1,-2,3,-7,4,-9,5,-2,2,-4,7,-4,0,-4,-1,-4,1,-3,3,-3,2,-3,1,-2,-1,7,3,5,3,1,3,-3,0,-6,-2,-6,2,-4,2,1,0,-3,8,2,8,0,6,-1,7,7,7,6,7,7,3,3,1,-1,-1,-4,-1,-2,1,-8,4,-7,6,-3,7,-2,6,-1,5,-6,2,-3,4,-2,0,-2,-4,-6,-1,-3,-4,-3,-4,-7,-5,1,-2,-3,-1,-5,1,-6,-1,-2,-5,0,-6,-3,-1,-5,-2,-2,-6,0,-4,-3,0,-4,-5,-3,-6,1,-6,-3,-5,0,-7,-3,-2,-5,0,-3,-10,-4,-16,-5,-9,-7,-5,-1,-3,1,-5,-4,-7,-2,-8,-1,-3,0,-2,-3,-3,0,-1,-3,-5,0,-3,-1,-7,0,-3,6,1,6,-2,3,-2,7,-3,4,2,1,-1,4,1,2,0,4,-1,5,-4,3,0,4,-5,3,-6,9,-3,8,-7,7,-4,1,-7,10,-1,7,1,6,-6,11,-5,4,-5,2,-3,6,0,2,-3,5,-3,2,-3,8,-7,8,-5,7,-5,0,2,5,0,4,2,4,-1,1,-3,-4,-2,-8,-2,-5,-3,-2,-3,4,-5,4,-7,15,-1,-1,4,-11,6,-10,8,-16,4,-5,3,-6,9,-11,-2,-1,0,-7,12,-9,2,-2,3,-10,-2,-2,1,-10,4,-12,4,-2,5,-4,6,-12,3,-9,5,-5,14,-9,5,-6,6,-6,3,-3,5,-3,2,-3,0,-4,-6,-3,4,-2,4,-2,2,-4,4,-5,5,0,10,3,10,1,9,3,5,1,4,2,5,0,4,0,4,2,6,1,4,3,4,0,0,-3,-1,-5,0,-6,-2,-3,-2,-11,-5,-11,-6,-13,-9,-15,-9,-11,-11,-13,-10,-9,-15,-9,-10,-8,-11,-12,-2,-5,-2,-3,-7,-4,-3,-4,-3,-1,-2,-7,-3,-4,-2,-6,-4,-4,-5,-12,1,-6,6,-3,1,-3,-3,-6,1,-3,-1,-5,3,-6,5,-10,3,-2,2,-5,-1,-10,2,-8,0,-16,2,-5,-3,-7,-4,-7,-6,-6,-10,-4,-11,-5,-11,-11,-4,-1,-7,-8,-4,-2,-1,-7,5,-8,2,-5,0,-3,2,0,-1,-10,-1,-4,2,-2,-1,-4,-5,-4,-8,-3,-12,-6,-4,-3,1,-4,2,-1,-1,-5,-2,-8,-1,-8,-3,-5,-7,-5,-2,-1,-4,-5,-3,-5,-5,-7,-12,-11,-7,-6,-7,-4,-11,-4,-5,-1,-1,-2,-6,1,-5,-2,-11,2,-6,-1,-4,0,-11,-4,-8,-1,-6,-4,-5,0,-4,3,-3,1,-5,4,0,-1,-2,2,1,6,-4,7,3,2,0,7,-6,10,-5,8,0,0,-8,13,-7,8,-4,7,-2,10,-3,7,-3,15,0,12,-1,6,-4,4,-5,8,-6,12,-2,7,-8,9,-1,8,-1,6,2,9,3,9,1,5,3,9,2,4,6,6,3,5,1,7,0,6,-3,3,-3,6,-2,6,0,2,3,4,-3,10,-2,7,-5,6,1,2,-1,3,-3,8,-8,10,-10,10,-7,9,-6,10,0,3,2,3,3,8,2,7,-2,2,3,11,2,8,-4,6,-5,2,-2,5,-2,1,0,3,-10,-4,-4,1,-4,-3,-8,1,-5,6,-4,7,-7,7,-7,0,-9,0,-8,-2,-8,-2,-16,-6,-6,-3,-9,-3,-9,3,-4,0,-7,2,-6,0,-12,-2,-7,-3,-10,-4,-2,1,-3,0,-10,4,-9,8,-9,5,-6,7,-3,1,-7,4,-5,5,-2,4,-1,7,-5,6,-4,4,-2,1,-3,2,-1,5,-1,2,-3,1,-6,5,-4,0,-2,3,0,2,-3,2,-1,2,-1,8,1,4,-4,8,-5,3,4,2,5,7,2,5,-1,6,3,5,2,9,-2,10,-1,5,1,5,-2,5,-6,4,1,4,0,5,4,3,3,5,0,3,3,7,6,7,3,1,3,6,0,5,4,7,6,3,7,10,5,4,9,1,8,7,5,3,8,8,-2,13,4,8,1,6,6,6,10,5,8,4,7,10,3,7,7,0,6,-5,10,1,10,-2,4,0,10,5,11,2,6,4,10,3,17,2,16,1,5,-2,10,4,10,0,4,-2,7,0,11,5,7,-2,0,-5,8,4,1,-2,-5,-5,0,-5,3,-2,-1,-9,-6,-5,1,-5,6,0,2,-5,4,-2,12,-3,4,1,8,-2,13,-4,5,-9,9,-2,14,-4,11,-5,5,2,5,5,-3,8,3,4,8,5,6,1,14,-2,3,-4,4,0,3,-2,10,-1,3,-3,13,0,10,-3,9,-3,5,-1,8,3,4,3,9,1,7,-2,3,-5,2,4,8,-3,8,0,5,2,3,3,-1,1,3,5,2,7,1,3,0,0,4,8,5,7,0,0,-1,8,2,4,-3,5,4,4,-6,-1,-9,2,-7,-6,-15,-1,-8,5,-11,1,-2,-4,-7,-2,-10,6,-11,0,-6,10,-7,5,5,8,-6,5,11,9,15,1,4,7,19,-1,12,6,12,3,17,0,17,-7,14,-4,12,2,9,-1,12,5,1,5,-2,6,-6,4,-6,1,-3,3,-13,9,-12,4,-8,5,7,2,8,8,-5,4,14,4,0,3,-9,-2,-8,-1,-6,-3,-10,-1,-8,-3,0,-6,5,-3,10,1,-2,-4,-11,-2,-13,-5,-6,2,2,4,-10,3,1,2,10,4,-3,2,-16,2,0,4,-10,-1,-3,-6,-8,-7,0,-3,-5,-2,-3,1,-2,-12,-6,-4,-3,-7,3,-6,1,-4,9,-3,-2,-2,-12,-1,-4,-3,-8,-5,-4,4,1,2,-7,1,-5,0,-12,-2,7,-6,-5,-1,-6,0,-5,5,-2,-2,3,-6,5,-5,-4,-2,5,-5,5,-3,0,-5,-9,2,3,-5,-6,-1,4,-9,-7,0,-8,4,-4,8,-2,7,-4,5,-5,5,0,3,-2,1,0,2,-6,4,-1,4,1,7,1,3,-1,2,-2,1,-3,3,-5,2,-9,3,-6,4,-9,3,-8,7,2,1,-5,4,0,4,-6,1,-3,-4,-3,3,0,4,0,0,2,1,-8,1,-8,-3,1,-5,-1,-3,3,-5,9,-5,5,-8,11,-8,8,0,3,-3,-3,-2,9,-3,7,-3,9,-5,1,-2,-2,-4,-6,5,-8,1,-4,-6,7,-4,-1,-5,-5,-1,-5,-8,-4,-1,0,3,2,6,2,2,-4,5,-3,5,-4,2,-3,4,-6,2,-5,4,-7,1,-8,4,-9,7,-7,5,-3,10,-5,1,-8,4,-5,-2,-6,-4,-4,-1,-9,-6,-19,3,-15,-3,-1,-6,0,-6,-9,-7,-13,-2,-1,-3,-6,-6,-4,-8,4,-6,-6,-4,-2,-7,-7,-2,-7,-7,-13,0,-10,0,-6,-4,-4,-4,-5,1,-3,4,-3,5,-10,2,-4,-3,-5,2,-5,-1,2,8,-1,6,-5,1,-2,3,1,7,4,4,0,4,2,6,0,4,-2,3,0,4,0,7,-4,4,14,7,12,-1,14,0,11,-2,8,1,16,-1,5,6,2,20,-10,11,-8,5,-15,4,-1,7,13,2,17,-3,-3,12,9,-5,23,8,3,8,9,2,8,2,5,3,9,15,14,4,8,0,2,2,8,0,2,-2,7,5,-2,4,-1,6,-4,5,0,10,2,3,2,3,9,1,4,2,8,3,-1,-5,-2,-3,1,-3,5,-1,-2,-4,-3,1,-8,-7,3,-5,0,-4,10,-2,0,-4,11,2,5,3,11,-4,5,-3,7,3,16,4,12,4,10,-2,1,-3,10,0,2,5,14,3,-2,8,0,8,5,6,9,4,8,-8,8,0,2,8,1,6,-3,-1,-7,3,-1,6,13,3,13,1,10,-2,11,1,11,5,-10,5,-18,-1,-18,-3,-16,-3,-6,6,-10,3,2,10,-4,9,4,6,9,6,23,11,7,2,-1,4,-14,5,-17,-3,-10,-7,2,-6,-16,-8,-20,-9,-7,-14,7,-7,10,-5,-9,-11,-11,-3,-4,-17,-5,-9,-12,1,-6,-8,-12,0,-3,9,-8,11,-8,15,-6,6,-20,-12,-13,-2,-14,5,-4,11,-3,23,9,6,27,9,19,10,19,14,24,19,16,8,28,12,22,5,16,-1,15,8,19,0,18,2,31,-7,-13,-3,11,-6,10,3,17,-6,27,-2,38,-12,8,-4,0,-7,-11,-5,-16,-3,-45,8,-7,-2,16,-7,1,-15,13,-3,8,-2,1,4,-6,5,7,3,24,-6,8,3,-6,7,23,10,9,-1,10,-3,5,7,-8,6,5,6,-7,6,28,-4,5,-5,-12,-1,0,-6,7,-3,16,2,2,6,21,5,35,9,8,-1,-10,-6,12,-1,7,3,19,1,15,4,11,-6,12,6,-11,6,6,4,29,-4,14,-3,36,-11,7,5,-10,5,-1,3,-12,1,4,4,-6,8,0,3,18,9,7,9,7,2,27,-2,2,-6,-10,-8,7,-3,3,-7,-2,-14,11,-6,-5,-7,-19,-14,11,-1,4,3,11,3,3,5,9,5,-6,5,4,7,-11,1,-2,5,8,10,-13,8,18,7,-2,7,5,1,5,-6,-4,-10,11,-1,-5,7,17,4,21,0,18,-6,-9,9,-1,10,18,3,24,-1,21,1,-8,6,12,6,11,0,20,5,26,2,3,2,27,1,8,-2,22,5,19,0,2,5,10,4,24,4,17,-3,-14,-3,23,-1,2,-5,10,2,29,0,22,-5,8,-4,-2,-5,-11,-3,-26,-5,-8,-3,12,-2,15,-2,9,2,5,-7,5,3,16,2,32,-2,2,-5,42,-1,1,7,21,-1,16,0,16,-6,5,-6,-6,-4,12,-8,16,-4,10,10,16,-4,17,3,19,-4,7,3,17,-1,-8,9,14,4,90,-6,9,-6,26,-8,40,2,20,-1,8,-4,-1,-8,12,-3,14,2,18,1,18,-2,19,1,18,-9,12,3,-8,7,5,4,31,-3,21,1,29,-5,-3586,-4;-938,775,-5,0,-19,1,-2,2,20,0,7,-2,-1,-1;-1102,777,-19,-3,-14,3,8,4,14,1,14,-2,-3,-3;247,779,-22,-5,-18,3,7,2,-6,4,21,2,4,-4,14,-2;-1097,786,-12,-2,-16,0,0,2,10,3,5,-1,13,-2;-958,781,-15,-3,-8,3,-5,4,0,4,13,-1,5,0,12,-4,-2,-3;-1001,783,4,-4,-16,1,-16,3,-23,1,10,3,-12,2,-1,4,20,-1,27,-4,7,-5;1051,783,-57,-4,19,13,8,1,7,0,26,-6,-3,-4;183,797,32,-7,-25,-4,-5,-8,-9,-2,-5,-8,-12,0,-21,6,9,3,-15,3,-20,9,-8,8,28,3,5,-3,14,0,4,3,15,1,13,-4;254,804,20,-3,-15,-6,-29,-1,-29,2,-2,2,-14,1,-11,4,31,3,14,-2,10,3,25,-3;511,805,-13,-1,-9,-1,-1,-1,-12,-2,-11,2,6,4,-23,0,20,2,15,0,2,-3,6,3,9,1,15,-2,-4,-2;999,789,-21,-1,-28,2,-17,4,-8,7,-13,2,26,7,21,3,20,-6,23,-9,-3,-9;-870,797,12,-4,-14,-3,-18,-7,-18,-1,-21,1,-11,5,1,3,8,3,-19,0,-11,3,-6,5,7,4,7,3,10,1,-4,2,23,1,13,-6,17,-2,16,-2,8,-6;-685,831,27,-1,21,-1,18,-3,0,-2,-24,-5,-25,-2,-9,-2,22,0,-23,-6,-17,-3,-17,-8,-20,-2,-7,-2,-30,-1,14,-1,-7,-2,8,-5,-9,-3,-16,-3,-5,-4,-14,-3,2,-2,17,0,0,-2,-27,-6,-26,3,-29,-2,-15,1,-19,1,-1,5,18,2,-5,7,7,1,26,-5,-13,7,-17,2,8,4,18,2,3,3,-14,4,-4,6,27,-1,8,-1,16,4,-23,1,-35,-1,-18,4,-8,4,-12,3,-2,3,15,2,12,0,19,2,15,4,12,-1,11,-3,8,6,13,1,18,1,30,1,6,-1,29,1,21,0,22,-1;-271,835,63,-8,-19,-4,-38,0,-54,-1,5,-2,35,1,31,-3,19,3,8,-4,-11,-5,26,3,48,4,30,-2,6,-4,-41,-7,-5,-3,-32,-1,23,-1,-12,-7,-8,-6,0,-12,12,-6,-15,-1,-17,-3,19,-5,2,-9,-11,0,13,-9,-22,-1,12,-4,-4,-3,-14,-2,-14,0,13,-7,0,-4,-20,4,-5,-3,14,-2,13,-6,3,-8,-17,-2,-8,4,-12,5,3,-6,-12,-6,27,0,14,-1,-27,-8,-27,-8,-30,-4,-11,0,-10,-4,-14,-10,-22,-7,-6,-1,-14,-2,-14,-2,-9,-7,0,-7,-5,-6,-16,-8,4,-8,-5,-8,-5,-10,-14,-1,-15,9,-20,0,-9,5,-7,10,-17,12,-5,7,-2,9,-14,9,4,7,-7,4,10,12,15,3,4,4,2,8,-11,-3,-6,-2,-9,-1,-12,3,-1,7,4,5,10,0,20,-2,-17,6,-9,3,-10,-1,-8,3,11,9,-6,4,-8,7,-12,10,-13,4,0,4,-27,6,-21,1,-27,-1,-24,0,-12,3,-17,6,26,3,20,1,-42,2,-23,4,1,4,38,5,37,5,4,4,-27,3,9,4,34,7,15,1,-4,5,23,2,31,2,31,0,11,-3,26,5,24,-3,14,-1,21,-3,-24,5,1,4,34,6,35,0,13,3,35,1,80,-1","bord":"403,-103,-8,-6,-11,-4,-6,0,-3,-3,-7,0,-3,-1,-12,3,-7,-1,-3,13,-4,5,-2,3,-9,2,-6,3,-6,1,-4,2,-5,3,-5,12,-6,6,-2,6,1,5,-2,9,5,0,3,4,4,5,3,2,-1,4,-2,2,0,4,3,1,0,6,-4,6,4,1,11,0,20,0,2,-1,36,-20,1,-6,14,-10;-170,214,0,0,22,1,2,4,4,4,3,14,14,11,5,12,3,1,3,8,9,1,3,-1,5,0,3,2,6,0,0,6,1,0,0,-1,0,-2,0,-15,-33,0,1,-25,-10,-1,-2,-5,2,-15,-39,0,-3,-3;-1305,548,5,5,0,6,-17,7,-10,11,-7,7,-9,5,-6,4,-6,5,-10,-3,-10,-6,-8,7,-7,4,-10,3,-10,0,0,57,0,37;-671,451,-7,6,0,14,-4,3,-7,-2,-3,2,-8,-7,-3,-8,-4,-4,-4,-2,-3,0,-1,-3,-18,0,-16,0,-4,-2,-11,-7,-1,-1,-3,-4,-9,0,-10,0,-5,-1,2,-2,1,-3,0,-1,-13,-5,-11,-2,-11,-5,-3,0,-3,1,-1,2,0,1,2,3,5,6,3,6,-2,8,-3,9,-10,5,1,2,-1,1,-3,0,-2,2,0,2,-2,-1,-3,0,1,1,-3,1,-1,3,-8,3,-8,4,-9,3,-10,4,-9,-3,-3,0,-12,3,-8,-2,-10,4,-10,1,-7,1,-3,1,-2,6,-4,0,0,-4,-20,0,-35,0,-34,0,-29,0,-31,0,-29,0,-30,0,-10,0,-30,0,-28,0;-971,259,-4,-1,-7,3,-8,3,-3,4,-2,7,-6,6,-4,6,-5,7,-7,4,-8,0,-6,-8,-8,3,-6,3,-2,5,-3,5,-6,5,-5,3,-4,4,-17,0,0,-5,-8,0,-20,0,-23,7,-15,5,1,2,-13,-1,-11,-1;491,464,-5,2,1,5,-6,6,-8,0,-8,7,5,8,-2,2,8,11,10,-6,1,7,21,11,15,0,22,-7,12,-4,11,4,16,1,12,-6,3,3,14,0,3,5,-16,7,9,4,-2,3,10,3,-7,7,4,3,38,4,5,2,25,4,9,4,18,-2,3,-11,10,3,13,-4,-1,-5,10,0,25,10,-4,-3,13,-8,22,-25,6,5,13,-6,15,3,5,-2,5,-6,7,-2,4,-4,13,1,6,-6,-8,-7,-8,0,-1,-10,-5,-5,-20,3,-7,-18,-6,-2,-19,-4,9,-17,-7,-3,1,-5,-7,1,-5,4,-14,1,-17,0,-4,-1,-14,4,-6,-2,-1,-6,-17,3,-6,-1,-2,-4,-6,-2,-13,-7,-5,-7,-3,0,-3,4,-13,1,-2,8,-5,0,1,10,-12,7,-17,-1,-12,-1,-9,9,-9,4,-15,7,-2,1,-26,-6,1,-37,-5,0,-7,7,-7,3,-12,-2,-4,-3;710,423,3,-1,-9,-7,8,-4,7,3,12,-5,-13,-8,-8,1,-4,0,-1,3,2,5,-14,-3,-3,-6,-5,-6,-8,1,-3,-5,8,-2,2,-7,-6,-11,-7,3,-6,0,0,6,-13,4,-10,5,-7,5,-11,7,-5,10,-4,2,-10,-1,-4,2,-1,8,-14,6,-8,-6,-9,-4,2,-5,-11,0;1410,-91,0,32,0,33;1250,-89,1,-2,0,-3;1097,20,1,-7,7,-5,7,2,6,-1,6,5,5,1,9,-3,8,2,5,14,4,4,4,11,11,0,9,-2;-670,-549,-6,0,-10,0,0,23;-686,-523,-9,2,-24,1,-4,6,0,7,-7,0,-3,3,-1,11,8,4,3,7,-1,5,5,8,3,13,-1,6,5,2,-1,4,-5,2,3,4,-4,4,-3,11,5,2,-2,13,2,10,3,9,6,3,-3,10,0,9,7,7,0,8,6,10,0,9,-3,2,-4,17,6,11,-1,9,3,9,7,10,7,6,-3,4,2,3,0,17,11,5,3,10,-1,3,8,9,13,-3,6,-7,4,8,12,0,1,-2,19,-17,8,-1,12,-8,10,-4,2,-4,-10,-15,10,-3,11,-1,8,1,9,8,2,9,5,2,5,-6,0,-8,-9,-6,-7,-4,-11,-10,-13,-13,-3,-8,-2,-10,0,-10,-3,-3,0,-6;-704,-183,5,2,3,5,5,-7,1,-7,6,-4,-4,-10,6,-11,4,-14,7,2;307,-83,-4,1,-13,-2,-3,-1,-3,-7,3,-4,-2,-12,-1,-10,2,-2,7,-4,3,2,1,-11,-8,1,-4,5,-3,4,-8,2,-2,5,-6,-3,-8,1,-4,5,-6,1,-5,-1,0,3,-4,1,-4,0,-7,-1,-4,0,-2,-1,0,12,-3,4,-1,6,1,6,-2,4,0,6,-12,0,1,4,-5,0,-1,-2,-6,-1,-2,-5,-2,-3,-5,2,-4,-2,-6,-1,-4,6,-2,3,-3,6,-3,7,-29,0,-4,-1,-3,0,-4,-1;122,-58,2,1,1,5,1,2,4,2,3,-1,3,4,5,0,1,-3,4,-2,6,7,6,4,2,4,0,8,4,10,5,5,6,5,1,3,1,3,1,4,0,6,1,8,2,7,3,5,1,6,0,7,4,5,6,3,8,-3,6,-4,8,-1,7,-2,3,6,1,1,5,-1,11,5,4,-2,3,0,2,3,4,1,7,-1,6,-1,4,1,6,-8,4,-1,3,2,5,-1,5,2,3,-4,8,-7,0,-12,4,-1,-3,-4,-4,-2,-4,-5,-2,-5,-1,-8,-2,-4,0,-7,-3,-3,0,-6,-2,-1,-1,-5,3,-5,0,-12;416,-17,-6,8,0,37,9,11,2,3,7,1,9,7,13,0,28,30,7,8,4,7,0,5,0,10,0,4,0,0;339,-10,0,11,3,4,5,7,3,7,-4,12,-1,5,-5,7,6,5,7,7,5,-2,0,-5,4,-4,7,0,12,-8,3,0,3,0,2,-1,7,-1,3,4,9,5,4,-4,7,0;384,180,-5,-6,-7,-1,-3,-3,-1,-7,-5,-15,1,-4,-1,-8,-4,-10,-6,-5,-5,-8,-1,-4,-4,-3,-3,-10,0,-9,0,8,-2,0,0,5,-1,3,-5,4,-1,7,1,8,-5,0,0,-2,-6,0,2,-3,1,-6,-5,-6,-5,-7,-6,-1,-8,6,-4,-2,-1,-3,-5,-2,0,-2,-10,0,-2,2,-7,0,-3,-1,-3,1,-5,5,-2,3,-7,-1,-3,-5,-3,-9,-3,-2,-3,-1,7,-4,-8,5,-3,3,-1,3,2,4,0,4,-6,6,-1,4,0,3,-4,3,0,6,-2,3,-4,0,1,4,3,4,-1,4,3,3,-2,2,3,6,4,8,9,-1,-1,40,0,4,12,0,0,20,40,0,39,0,40,0;229,111,-7,-1,-5,-4,-7,-11,-9,-5,-10,1,-3,-1,1,-4,-5,-3,-4,-4,-13,-4,-2,2,-2,1,-2,-3,-8,-1,1,3,-3,7,-1,4,-5,2,-5,5,2,5,4,-1,3,1,6,0,-6,9,1,7,-1,6,-4,7,1,4,-6,1,0,6,-5,4,5,13,12,9,1,13,4,21,2,4,-4,3,0,3,-4,3,-2,16,10,5,39,-19,40,-19;-717,197,1,-5,-1,-4,-2,-2,2,-3,0,-3;213,552,10,-2,5,-1,-2,-3,1,-3,-18,0,-12,1;1308,422,-2,2,0,5,5,0,2,12,-3,9,9,3,12,-2,7,10,3,11,4,4,5,9,-16,-3,-9,-4,-15,0,-4,9,-12,7,-17,4,-4,9,-4,7,-3,4,-7,10,-8,4,-15,3,-14,-1,-12,-1,-8,-5,5,-3,0,-5,-5,-4,-9,-10,0,-5,-14,-6,-12,4,-12,-1,-5,3,-6,1,-15,-7,-13,-1,-9,-3,-13,2,-9,0,-6,5,-10,5,-10,1,-13,-1,-9,-2,-14,4,-2,8,-12,2,-9,1,-11,4,-11,-10,4,-6,-9,-7,-15,3,-10,0,-7,5,-10,0,-9,3,-15,-5,-19,-8,-10,-2,-4,-1;486,418,-6,-4,-2,-2,-4,0,-7,6,-3,1,-6,2,-3,4,-10,2,-6,-1,-1,1,-14,5,-15,2,-8,2,-1,-2;382,471,1,4,5,3,9,1,2,3,-2,6,4,5,0,3,-15,3,-6,0,-6,5,-8,-2,-12,4,0,2,-4,4,-8,1,-1,3,3,2,-6,5,-11,-1,-3,1,-2,-2,-4,0,-3,6,-2,4,2,1,8,-1,4,3,-3,2,-7,2,1,2,-4,2,-6,6,2,3,-1,5,-10,2,-5,-1,-2,2,-10,3,-3,6,-1,4,-5,3,4,3,-3,9,7,6,-1,2;281,605,21,13,9,6,4,5,-15,7,4,6,-9,7,7,9,-11,11,9,8,-16,7,2,7,8,1,17,4;334,460,3,2,7,-2,3,0,2,-2,1,-1;286,691,4,7,-13,4,-15,-4,-5,-7,-10,-5,-10,3,-13,-1,-12,6,-6,-3,-6,0,-1,-7,-19,2,-3,-6,-9,0,-7,-7,-10,-11,-15,-14,3,-4,-3,-4,-10,1,-7,-10,1,-13,6,-5,-3,-12,-8,-7,-5,-5;163,-286,5,5,4,-3,2,-4,4,-1,7,-1,5,0,9,5,0,37,3,-1,6,-10,-1,-6,2,-3,7,1,5,4,5,3,2,5,5,2,4,-1,5,-3,8,0,7,2,1,3,1,5,6,1,3,4,3,6,9,8,14,7,4,0,5,-2,4,1,5,-1,5,-14,2,-7,-1,-11,0,-3,-5,1,-3,0,0,-3,-3,-4,0,-3,6,-6,6,1,2,5,7,0;290,-290,-5,4,-4,-3,-6,-3,-5,-7,8,-7,3,1,2,3,5,1,2,4,3,4,-3,3;-883,185,-2,0,-3,-6,-2,1,-1,0,0,-2,-10,0,-9,0,0,-5,-5,0,4,-4,4,-2,1,-2,2,-1,-1,-3,-12,0,-5,-8,1,-2,-1,-3,0,-3;-576,-302,6,1,10,-8,4,0,10,-6,8,-5,6,-7,-4,-5,2,-6;-546,-257,2,5,1,6,0,6,-4,2,-3,-2,-4,0,-1,4,-1,9,-2,3,-7,3,-4,-2,-10,2,0,14,-3,5,3,2,-1,6,3,4,2,8,-2,6,-6,3,-1,4,2,6,-20,0,-3,12,2,0,0,5,-2,2,0,6,-6,3,-6,0,-4,3,-7,2,-4,4,-11,1,-11,9,1,7,-1,4,1,7,-13,-1,-6,-4,-8,-4,-3,-3,-5,0,-7,0,-6,-1,-4,1,0,15,-8,-6,-9,0,-4,6,-6,0,2,5,-6,6,-4,9,3,2,0,4,6,3,-1,5,2,4,1,4,12,7,8,2,1,1,9,0,5,27,0,5,-2,6,-4,3,0,7,5,2,2,-1,1,4,-6,1,0,6,19,0,4,3,2,-3,2,-6,2,2,6,-6,8,1,1,3,8,2,4,2,1,4,7,3,0,2,-9,1,-1,6,0,7,-4,3,2,0,7,-1,8,-2,3,2,7,2,11,3,4,4,-1,3,5,0,2,-2,-1,-4,3,-2,3,-4,-3,-4,-2,-8,3,-6,1,-4,6,-5,5,0,1,2,3,0,4,2,4,2,5,0,3,0,5,-1,1,2,-2,2,1,3,4,-1,5,1,6,-2,4,-2,3,3,2,-1,2,-2,5,0,3,4,4,7,5,10;-582,-202,0,3,-9,5,-9,1,-18,-3,-5,-9,0,-6,-4,-11;-696,-176,6,11,-4,8,2,4,-1,3,4,5,0,9,0,7,2,3,-8,16;-803,-34,1,-4,-3,-3,1,-3,4,1,4,-2,4,-5,6,5,1,6,7,9,12,4,11,10,3,7,-2,7,3,1,7,-4,3,-5,4,-3,6,-10,8,-1,5,2,4,-1,6,0,8,-4,-7,-10,3,-1,5,-5;-754,-2,-4,3,-5,3,-3,-1,-8,1,-3,4,-2,0,-10,6;-779,72,1,5,4,-1,2,3,-3,6,1,2;-713,118,-7,-2,-2,-5,-4,-3,-3,-3,-1,-8,-3,-5,5,-1,1,-5,3,-2,0,-4,-1,-4,1,-2,2,-1,2,-3,13,1,6,-1,7,-9,4,1,7,0,6,1,4,-2,-2,-5,-2,-4,-1,-7,2,-7,3,-3,0,-2,-5,-5,4,-2,2,-4,3,-9;-830,82,1,2,1,2,-1,2,2,1,-2,2,0,4,4,1;-857,111,1,1,7,-2,2,1,3,-1,2,-2,3,-1,2,2;-873,130,3,0,1,3,2,0,-1,5,3,0,2,0,2,2,3,-2,1,2,2,1,3,3,1,2,0,0,2,2,1,0,2,-1,2,-1,2,1,2,0,4,2,1,1,4,0;-878,134,1,4,-2,1,-2,1,-4,-2,0,2,-3,1,-3,2,-3,1,3,3,-1,2,0,2,5,2,5,4;-901,137,0,2,4,2,2,1,-1,2,2,0;-891,178,0,-8,-1,-11,3,0;-598,84,-8,-6,0,-4,3,-4,-2,-1,-7,-2,1,-5,-3,-2,7,-8;-571,60,-2,-9,-6,-3,0,-2,-1,-5,4,-8,3,0,2,-5,6,-9;-540,58,-5,-9,1,-7,4,-6,-2,-4,-1,-5,-2,-4;25,511,2,-3,4,0,5,-4,7,-5,5,1,9,-5,2,-1,3,1,5,-3,14,-2,-5,-7,-1,-7,-3,-2,-5,1,1,-2,-8,-6,0,-4,5,1,3,-4,0,-3,3,-4,-4,-3,3,-7,6,-2,-2,-4;30,425,-12,-2,-11,5,-4,-2,-18,4,-4,4;294,-221,-6,5,-8,1,-3,6,0,4,-4,1,-11,11,-3,6,-3,2,-3,8,11,-1,3,-2,3,1,6,6,9,8,3,1,1,4,6,4,8,1,0,-4,9,0,4,-2,3,-2,4,-1,5,-3,0,-13,-1,-7,-1,-7,2,-3,-1,-6,-2,-1,-3,-7,-10,-12;199,-248,0,30,10,0,0,35,8,1,15,3,4,-4,6,4,3,0,6,2,2,0;117,-173,5,2,6,2,7,-1,6,-4,1,0,41,1,7,-5,24,-1,18,4,8,2,7,-1,4,-2,0,-1;-165,161,4,4,5,-1,5,2,5,0,5,-3,7,-3,6,-7,6,-7,1,-6,2,-6,3,-3,1,-3,0,-4,-2,0,-5,1,-1,-1,-2,-1,-7,3,-5,0,-18,0,-3,-1,-3,0,-6,-1;-168,132,9,-1,2,2,2,0,4,2,4,-2,4,0,5,2,-2,3,-4,-2,-3,0,-4,3,-3,0,-2,-3,-11,0;-122,146,4,2,1,6,4,0,6,-3,6,2,4,0,2,2,40,0,2,7,-2,1,-5,43,-5,44,16,0,34,-22,33,-22,3,-5,6,-2,4,-2,1,-6,11,1,0,-23,-6,-7,-1,-6,-9,-2,-13,-1,-4,-3,-6,-1,-7,0,-2,2,-6,-1,-9,-4,-2,-4,-8,-4,-1,-3,-4,-2,-5,2,-3,-3,-1,-7,-8,-8,0,-3,-3,-4,1,-6,-4,-2,-2,-1,-2,4,-3,-1,-2,0,-1,-3,-8,0,-3,2,-1,-1,-3,3,0,3,-1,1,-2,-1,0,3,2,3,-4,4,-1,3,-2,2,-2,0,-3,-1,-3,-1,-3,-3,-4,1,-3,3,-1,0,-3,-1,-2,0,0,3;-87,274,38,-24;19,61,-3,7,1,23,-2,2,-1,5,-3,4,-3,3,1,5,3,1,2,4,5,1,3,3,3,3,3,0,8,-5,0,-4,2,-6,-2,-4,1,-2,-5,-7,-3,-3,-2,-6,0,-6,0,-16;145,129,-3,-1,0,-3,-2,0,-7,11,-2,0,-8,-6,-8,3,-5,1,-3,-2,-6,1,-6,-4,-5,-1,-12,5,-5,-2,-5,0,-4,4,-10,4,-10,-2,-3,-2,-1,-5,-3,-4,-1,-9;22,119,0,7,-12,3,0,4,-6,7,-1,4,1,5;43,192,14,4,29,20,34,19,16,-5,5,-5,8,4;142,125,4,-4,-1,-2,-1,-3,-8,-8,-3,-6,-1,-6,-2,-2,-2,-7,-6,-4,-1,-5,-3,-4,-1,-4,-6,-4,-6,5,-4,-1,-6,-5,-3,-1,-4,-9,-3,-7;153,74,-5,-10,-3,-2,0,-7,1,-5,-1,-3,5,-5,0,-3,4,-6,5,-3,0,-4,1,-3,-1,-6,-8,3,-8,2,-12,1,-1,0,-6,-1,-6,1,-5,0,-17,0;11,59,-3,4,-2,6,-1,5,2,9,-2,4,-1,8,0,7,-4,5,0,3,9,0;-29,50,1,4,-4,9,2,11,4,8,-2,14,-2,8,1,6,17,0,4,-1,4,2,4,-1;-54,104,4,-2,2,-4,5,-2,3,3,5,0,7,-3;-77,44,1,8,1,1,-1,4,-4,4,-3,1,-3,3,2,4,-1,5,1,3,1,0,1,4,-1,2,1,2,4,1,-3,8,-2,4,1,3,2,1;-84,77,-3,0,-2,-4,-3,0,-2,2,1,4,-5,6,-2,-1,-2,0,-3,-1,0,4,-2,3,1,3,-2,4,-3,3,-8,0,-3,-1,-2,-1,-2,-2,-1,-3,-5,-4;-151,110,4,5,3,0,3,2,2,0,2,1,-1,3,1,1,0,4;-114,68,2,3,1,3,4,5,5,5;185,35,-7,1,-7,1,-6,-5,-5,-9;246,82,5,-4,0,-3,7,-5,4,-5,3,-6,7,-3,2,-4;130,-48,-4,4,-3,-2,-4,-4;111,-40,8,6,-4,6,3,3,7,1,1,5,5,-5,9,-1,3,5,1,7,-1,7,-5,6,5,12,-3,2,-7,-1,-3,5,1,5;95,10,3,1,15,0,0,12;328,-92,4,-5,3,-8,-2,-3,-2,-8,2,-8,-3,-4,-3,-9,5,-3,-30,-8,1,-7;232,-175,-6,6,-7,8,0,32,21,0,-1,3,2,4,-2,5,1,5,-1,3;346,-115,-3,-8,3,-13,3,0,4,-3,4,-7,1,-13,-5,-2,-3,-7,-6,6,-1,7,2,5,0,4,-4,2,-3,-1,-6,5;321,-267,-1,4,-2,5;290,-28,6,-1,3,6,6,-1;351,331,4,0,1,2,2,0,0,-4,-1,-2,0,0,-2,-3,-3,1,-2,-6,2,-1,-2,-2,-1,-2,5,1,0,-4,-5,-16,-1,3,-5,14;360,346,4,0,2,-4,-5,-4,-3,-5;355,324,0,-6,-1,-3;115,331,-1,-7,-5,-3,-3,-3,-7,-4,2,-4,-1,-5,-5,-2,-4,18,-7,4,0,2,-8,6,-1,8,6,6,3,8,-2,9,2,5;-87,277,0,11,16,8,10,1,9,3,3,5,12,4,1,7,5,1,5,4,13,2,2,4,-3,2,-3,10,-1,6,-4,7;95,303,3,-9,1,-4,-2,-9,1,-4,-2,-6,1,-6,-4,-4,6,-7,0,-5,4,-5,5,2,8,-5,4,-6;357,327,11,-4,20,11,4,-12,-2,-2,-20,-5,10,-10,-3,-2,-2,-3,-8,-1,-2,-4,-4,-3,-11,2;561,261,2,-4;564,249,-5,0,-1,-6,2,-2,-5,-2,0,-4,-3,-4,0,-4,-2,-2,-30,5,-4,10,0,2;514,246,-3,0,-3,2;484,286,-7,-1,-2,5,-9,1,7,10,7,-1;388,334,22,10,4,12,-1,8,5,2,5,6,5,2,11,-1,4,-3,5,2,6,-12,7,-3,1,-6,-5,-4,-3,-7,7,-10,12,-5,5,-8,-1,-7,3,0,0,-5,6,-6;466,291,-19,1,-28,20,-15,7,-12,3;531,167,-3,6,-8,17,30,10,7,20,-5,7;1026,122,-3,12,7,8,13,2,9,-1,8,-4,5,7,9,-4,2,-7,-1,-12,-17,-7,4,-6,-10,-1,-9,-4;1021,62,-3,-4,-6,-1,-1,5,-8,4,-2,-1;986,99,4,11,6,9,-4,9,0,5,-1,5,-7,8,-2,5,3,2,4,9,-4,6,-6,8,-5,8,4,2,5,11,7,1,5,4,6,2,4,-3,1,-6,7,0,-3,-11,1,-9,10,6,3,-2,6,1,2,3,8,-1,7,-8,1,-10,8,-8,-1,-9,-3,-4;1001,204,2,4,9,6,1,-2,5,0,-1,11,5,2,6,-8,4,-9,12,0,4,-9,-6,-3,-3,-3,12,-6,8,-12,7,-9,7,-7,3,-7,-2,-10;924,207,-1,8,4,-2,0,7,5,3,-1,4,2,3,0,11,8,-2,5,8,0,5,6,8,-1,6,13,7,7,-2,0,6,3,2,-1,4,6,0,3,-6,5,-2,0,-8,0,-8,-10,-8,-1,-12,11,2,2,-10,6,-2,-3,-8,8,-4,4,-1,7,2,1,-4;1022,225,5,2,8,0,10,1,8,6,5,-4,9,-2,-1,-6,4,-4,10,-2;1284,386,-2,-2,-4,-1,-7,0,-4,-5,-5,0,0,-1;1243,399,8,7,11,5,7,7,4,-3,9,0,-1,5,15,4,4,6,6,-6;1167,499,-5,-8,-7,-10,2,-4,6,2,10,-2,8,4,8,-4,9,-7,-1,-3,-8,1,-15,-1,-7,-3,-7,-7,-15,-4,-10,-5,-11,2,-5,1,-6,-6,4,-4,1,-4,-7,-3,-7,-5,-12,-4,-15,0,-16,-4,-11,-5,-5,3,-12,0,-15,6,-10,2,-13,-2,-20,2,-12,0,-5,6,-5,9,-6,2,-12,6,-14,1,-12,2,-3,4,4,12,-7,8,-14,4,-9,5,-2,7;927,220,-6,16,-2,0,-2,-6,-5,5,3,6,4,0,5,9,-6,1,-9,0,-10,2,-1,7,-4,0,-8,4,-4,-6,7,-6,-6,-3,-2,-4,6,-3,-2,-6,4,-7,1,-8;682,237,6,7,22,0,-2,8,-5,5,-1,8,-7,4,11,11,12,-1,10,11,6,10,10,10,0,7,9,6,-8,5,-4,6,-4,9,5,4,16,-2,11,2,9,8,11,-12,-1,-8,4,-5,0,-5,-7,1,2,-11,10,-6,14,-7,-6,-5,-4,-9,10,-4,9,-5,13,-5,14,-2,6,-5,7,-1,12,-2,9,0,1,4,-2,6,1,5,6,2,1,-8,0,-2,9,-4,7,2,8,-1,8,0,1,7,-4,3,8,1,9,7,12,7,8,-3,7,5,5,-7,-4,-4,11,-1;888,273,7,7,5,3,7,-2,6,-1,4,-2;811,302,4,2,8,-3,10,-6,6,-2,3,-5,8,-2,8,-4,12,-2,11,-1;615,251,4,11,14,6,-1,4,-4,2,-1,9,-9,4,-4,6,-5,5,16,-5,10,2,6,-2,2,3,7,-1,13,4,1,8,5,6,8,0,1,3,8,1,3,-1,4,3,0,6,4,6,6,3,-4,6,10,0,3,3,-1,4,5,5,-1,5,-2,4,5,4,11,2,12,1,5,2,6,1,7,-4,3,-8,16,-4;678,371,3,-1,8,3,3,-1,3,4,6,0,2,1,1,4,4,4,5,-2,-1,-3,3,-1,-1,-8,4,-4,4,2,4,1,7,5,7,-1,10,0,2,-3;609,298,9,9,-1,7,-8,1,0,7,-4,8,5,5,-5,2,3,7,4,12,10,-3,8,1,2,5,8,1,5,3,2,8,9,2,1,4,5,-3,3,0;710,402,-4,-3,-10,2,-1,-6,10,1,13,-3,19,1,2,-9,4,1,6,-2,-1,-4,2,-6;803,424,-2,-3,-16,-5,-3,-4,-13,-1,-4,-7,-10,2,-7,-2,-10,-5,2,-2,-3,-3;612,356,-1,9,-7,0,-12,9,-8,1,-11,5,-7,1,-4,-2,-7,1,-7,-6,-9,-2;448,372,-6,8,2,3,-3,11,7,3,2,-4,5,-4,6,-2,4,1,12,7,4,1,3,-3,-4,-5,6,-5,3,0;361,358,3,2,3,3,0,5,4,-2,11,3,5,-2,8,0,12,4,5,0,11,1;461,387,-4,6,0,2,-4,0,-3,2,-2,0,-4,3,-7,3,1,4,-2,4,14,1,2,-2,4,-2,-2,-2,5,-4,-3,-3,4,-3,5,-1,0,-7;206,691,14,-5,15,-7,1,-15,3,-4;318,521,-9,-1,-3,-2,0,-5,-4,1,-9,0,-3,2,-4,-2,-4,2,-7,0,-12,2,-10,1,-7,0,-6,-3,-5,0,0,4,-3,5,6,2,0,4,-3,4,0,4,9,0,11,4,3,5,8,4,-1,4,6,2,11,4;296,453,-4,2,-5,-2,-5,2,3,1,2,3,2,4,0,1,2,1,1,-1,6,-1,2,1,-2,1,1,2,-3,2,-2,4,-3,2,0,3,-4,3,-4,1,-8,3,-6,-1,-3,-2,-4,0,-3,-2,-7,-1,-3,-2,-5,3,-6,0,-7,1,-4,-2,-1,3,-5,2,2,4,3,3,2,-1,-3,5,9,8,5,1,1,3,-5,9;226,491,-10,4,-7,-2,-5,1,-6,-2,-5,4,-4,-2,0,1,-5,5,-8,0,0,4,-7,1,-2,-3,-5,2,0,3,-7,1,-5,3,-4,6,1,4,-3,5,-3,4,3,2,-3,6;227,543,5,-1,3,-3;227,479,-6,-2,-5,-7,-6,-7,-8,-2,-6,1,-8,-3,-3,-1,-9,2,-7,4,-3,1,-2,3,-2,1;170,481,-1,-4,-6,0,2,-2,-3,-6,-2,-2,-9,0,-5,-3,-8,1,-14,3,-2,3,-10,-2,-1,-1,-7,1,-5,0,-4,2,1,2,0,2,3,1,5,-3,1,3,9,-1,7,2,5,0,3,-2,1,1,-1,7,3,1,4,5,7,-3,6,4,4,0,7,-3,5,1,5,-2,-1,-1,1,-4,5,-2,4,-1,8,1,1,2,4,0,5,2,1,-1,4,1,3,3,3,0,11,-3,2,1;282,455,-1,4,1,5,-1,4,-5,6,-4,4,-3,3,-3,1;286,437,-6,1,-8,4,-11,-3,-5,-2,-15,0,-8,2,-4,-1,-2,4,-2,2,2,2,-2,1,-4,-2,-5,3,-1,4,-6,2,-1,3,-6,4;211,560,11,3,17,0,10,1,1,-2,5,-1,10,-5;243,578,9,2,4,-2,9,-3,8,0;150,511,-4,-1,-3,1,-2,-2,-8,-2,-3,-2,-8,-2,2,-3,1,-5,5,-2,6,-4;96,475,-11,3,-2,-2,-8,0;62,495,0,4,-2,2,2,7,-2,11,6,0,2,3,3,9,-2,4;85,550,8,-2,6,2;280,420,-9,1,-10,-3,0,-5,-9,-1,-7,4,-8,-3,-7,0,-1,7,-5,3,1,2,-1,1,2,3,4,3,-5,4,-1,4,3,2;261,418,5,-2,-3,-7,-2,-1;202,396,4,5,1,3,3,2,0,2,7,1,4,3,5,-1,2,2,2,0;416,415,10,1,10,-5;194,419,-1,3,4,5,1,-2,3,1,2,-3,2,-1,1,-3,-1,-4,1,-4,4,-3;188,459,3,-4,3,-3,-4,-3,-4,2,-7,0,-9,1,-5,0,-2,-2,-3,2,-3,-4,5,-4,3,-4,4,-3,4,-3,4,-4,9,-4,-2,-1;137,455,7,0,2,1,3,-1,4,0,0,2,4,1,1,4,8,3;104,469,0,-4,-5,-2,-7,1,-2,-4,-5,0,-2,2,-5,-4,-5,0,-5,2;57,495,1,6,2,0;33,513,7,0,10,2,6,-5,6,-2;-90,419,3,2,4,2,3,-5,6,0,1,1,6,0,3,-5,-5,-3,0,-8,-1,-1,-1,-5,-4,-1,4,-6,-3,-6,4,-3,-2,-3,-3,-4,0,-3;-76,551,2,-5,-2,-5,6,0,8,-2;138,465,-1,-5,2,-4;450,412,2,2,8,-3,5,0,1,1,-5,5,3,2;1142,45,5,-5,2,3,4,0,1,7,1,4;170,486,1,2,4,0,4,1,0,1,2,0,1,3,2,0,2,2,3,0;431,127,-3,-2,-4,0,-4,4,-4,6,-4,3,-3,3,-9,4,-7,0,-2,2,-6,-2,-6,5,-3,-8,-12,2;428,163,4,4,-1,4,3,5,4,-3,3,1,11,0,2,-1,10,-1,3,1,3,-4,5,2,7,11,9,4,29,4;340,351,-1,0,-2,-1,-2,0,0,0,0,1,-1,1,-2,0,-3,-1,-2,0;250,220,0,37,0,35,-3,8,3,7,-2,4,4,5;353,55,-6,11,-5,2,-1,4,-5,5,-6,1,3,6,5,0,2,3;424,125,-4,-4,-3,-5,0,-2,1,-3,5,-1,3,1,2,-2,-2,-3,3,-6,4,-5,4,-3,32,-12,9,0;431,115,-3,-6;304,-11,-6,-3,-2,1;308,35,4,3,7,-2,8,2,7,0,6,5;190,449,4,0,-3,-5,5,-4,-1,-4,-3,-1,-2,-1,-3,-2,-1,-6;206,419,1,-1,1,3,6,1,2,0,3,1,5,0;216,422,-1,1,2,1,1,3,-2,0,-2,2,-1,0,-2,2,-1,0,-2,2,-2,-1,-1,-3,-2,-1,0,1,-3,2,-4,1,-1,2,-3,1;203,428,-2,-2"};
+const decodeLines=s=>s.split(';').map(l=>{const a=l.split(',').map(Number),o=[];let x=0,y=0;for(let i=0;i<a.length;i+=2){x+=a[i];y+=a[i+1];o.push([x/10,y/10])}return o});
+const COAST=decodeLines(GEO.coast),BORD=decodeLines(GEO.bord);
+const GLAT=[],GLON=[];for(let la=-75;la<=75;la+=15)GLAT.push(la);for(let lo=-180;lo<180;lo+=15)GLON.push(lo);
+const GPTS=[];GLAT.forEach(la=>GLON.forEach(lo=>GPTS.push([la,lo]))); // 11 x 24 = 264 nokta, tek istek
+const hex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+const SCALES={
+ temp:{stops:[[-40,'#7B3FB8'],[-25,'#3B4CC0'],[-10,'#3E8FD6'],[0,'#4FC3D9'],[10,'#5CC46A'],[20,'#E6D84A'],[28,'#F29A38'],[35,'#E0452F'],[45,'#8E1B1B']],ticks:[-40,-20,0,20,40],tick:v=>r0(TC(v))+'°',val:v=>r0(TC(v))+(prefs.unitT==='f'?'°F':'°C')},
+ wind:{stops:[[0,'#2B3A8C'],[10,'#2E86C1'],[20,'#3FB9A3'],[30,'#8DD35F'],[45,'#F2D04B'],[60,'#F28C38'],[80,'#D9412B'],[110,'#B0247F']],ticks:[0,25,50,75,100],tick:v=>r0(WS(v)),val:v=>r0(WS(v))+' '+wUnit(),unit:()=>wUnit()},
+ rain:{stops:[[0,'#4FA3E0'],[1,'#4FA3E0'],[5,'#3BC46B'],[10,'#F2D04B'],[20,'#F28C38'],[40,'#D9412B']],ticks:[0,10,20,30,40],tick:v=>v,val:v=>(v<10?v.toFixed(1):r0(v))+' mm',alpha:v=>clamp((v-.2)/1.3,0,1)},
+ aqi:{stops:[[0,'#3BC46B'],[20,'#9AD15A'],[40,'#F2D04B'],[60,'#F28C38'],[80,'#D9412B'],[100,'#8E2A8E']],ticks:[0,25,50,75,100],tick:v=>v,val:v=>r0(v)+' AQI'}};
+Object.values(SCALES).forEach(s=>s.rgb=s.stops.map(([v,c])=>[v,hex(c)]));
+function colorAt(s,v){const st=s.rgb;if(v<=st[0][0])return st[0][1];for(let i=1;i<st.length;i++)if(v<=st[i][0]){const [a,ca]=st[i-1],[b,cb]=st[i],f=(v-a)/(b-a);return[ca[0]+(cb[0]-ca[0])*f,ca[1]+(cb[1]-ca[1])*f,ca[2]+(cb[2]-ca[2])*f]}return st[st.length-1][1]}
+function field(vals){
+  const nr=GLAT.length,nc=GLON.length,g=(r,c)=>vals[clamp(r,0,nr-1)*nc+((c%nc)+nc)%nc];
+  const cr=(p0,p1,p2,p3,x)=>p1+.5*x*(p2-p0+x*(2*p0-5*p1+4*p2-p3+x*(3*(p1-p2)+p3-p0)));
+  return(lat,lon)=>{const fr=(lat-GLAT[0])/15,fc=(lon-GLON[0])/15,r=Math.floor(fr),c=Math.floor(fc),tr=fr-r,tcc=fc-c,row=k=>cr(g(k,c-1),g(k,c),g(k,c+1),g(k,c+2),tcc);
+    return cr(row(r-1),row(r),row(r+1),row(r+2),tr)};
+}
+function fillNulls(a){const nc=GLON.length;return a.map((v,i)=>{if(v!=null&&isFinite(v))return v;const r=Math.floor(i/nc),row=a.slice(r*nc,r*nc+nc).filter(x=>x!=null&&isFinite(x));return row.length?row.reduce((s,x)=>s+x,0)/row.length:0})}
+function gDemo(l){const R=rng('globe'+l+new Date().toISOString().slice(0,13));return GPTS.map(([la,lo])=>{const n=Math.sin(lo*Math.PI/50+la/20)*Math.cos(la*Math.PI/40-lo/70);
+  if(l==='temp')return 30-.62*Math.abs(la)-(la<-60?14:0)+6*n+(R()-.5)*4;
+  if(l==='wind')return Math.max(0,10+20*Math.abs(Math.sin(la*Math.PI/60))+10*n+R()*8);
+  if(l==='rain')return Math.max(0,n*16+(Math.abs(la)<12?9:0)+R()*8-7);
+  return 12+(la>10&&la<45&&lo>60&&lo<135?45:0)+(la>12&&la<35&&lo>-15&&lo<55?30:0)+R()*14})}
+async function gFetch(kind){
+  const key='hd-globe-'+kind,c=store.get(key,null);
+  if(c&&Date.now()-c.ts<36e5&&c.v)return c.v; // 1 saatlik önbellek: API'ye gereksiz yük bindirmez
+  const lat=GPTS.map(p=>p[0]).join(','),lon=GPTS.map(p=>p[1]).join(',');
+  const u=kind==='wx'?`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m&daily=precipitation_sum&forecast_days=1&timezone=GMT`
+                     :`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=european_aqi&timezone=GMT`;
+  const j=await getJSON(u,20000),arr=Array.isArray(j)?j:[j];if(arr.length!==GPTS.length)throw new Error('len');
+  const v=kind==='wx'?{temp:fillNulls(arr.map(x=>x.current.temperature_2m)),wind:fillNulls(arr.map(x=>x.current.wind_speed_10m)),rain:fillNulls(arr.map(x=>x.daily.precipitation_sum[0]))}:{aqi:fillNulls(arr.map(x=>x.current.european_aqi))};
+  store.set(key,{ts:Date.now(),v});return v;
+}
+const TW=2048,TH=1024;
+const G={ok:undefined,layer:'temp',vals:{},live:{},err:false,busy:false,rx:.3,ry:0,tx:.3,ty:0,drag:null,idle:0,vis:true,f:null};
+function gMsg(s){const m=$('#gmsg');m.hidden=!s;m.textContent=s||''}
+function gInit(){
+  if(G.ok!==undefined)return G.ok;
+  const cvs=$('#globe');
+  if(typeof THREE==='undefined'){G.ok=false;gMsg(t('gNoGL'));return false}
+  try{G.r=new THREE.WebGLRenderer({canvas:cvs,antialias:true,alpha:true})}catch(e){G.ok=false;gMsg(t('gNoGL'));return false}
+  G.ok=true;G.r.setPixelRatio(Math.min(2,devicePixelRatio||1));
+  G.scene=new THREE.Scene();G.cam=new THREE.PerspectiveCamera(32,1,.1,100);G.cam.position.set(0,0,4.25);
+  G.tc=document.createElement('canvas');G.tc.width=TW;G.tc.height=TH;
+  const x=G.tc.getContext('2d');x.fillStyle='#0C1F45';x.fillRect(0,0,TW,TH);
+  G.tex=new THREE.CanvasTexture(G.tc);G.tex.anisotropy=G.r.capabilities.getMaxAnisotropy();
+  G.globe=new THREE.Mesh(new THREE.SphereGeometry(1,128,96),new THREE.MeshLambertMaterial({map:G.tex}));
+  G.scene.add(G.globe);
+  G.scene.add(new THREE.AmbientLight(0xffffff,.88));const dl=new THREE.DirectionalLight(0xffffff,.32);dl.position.set(-2,1.6,3);G.scene.add(dl);
+  const vs='varying vec3 vN;void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}';
+  G.scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.16,64,48),new THREE.ShaderMaterial({vertexShader:vs,fragmentShader:'varying vec3 vN;void main(){float d=-dot(vN,vec3(0.0,0.0,1.0));float i=pow(clamp(d/0.52,0.0,1.0),1.8)*0.85;gl_FragColor=vec4(0.32,0.6,1.0,1.0)*i;}',blending:THREE.AdditiveBlending,side:THREE.BackSide,transparent:true,depthWrite:false})));
+  G.scene.add(new THREE.Mesh(new THREE.SphereGeometry(1.004,96,64),new THREE.ShaderMaterial({vertexShader:vs,fragmentShader:'varying vec3 vN;void main(){float i=pow(1.0-dot(vN,vec3(0.0,0.0,1.0)),3.5)*0.7;gl_FragColor=vec4(0.45,0.7,1.0,1.0)*i;}',blending:THREE.AdditiveBlending,transparent:true,depthWrite:false})));
+  G.marker=new THREE.Group();
+  const dot=new THREE.Mesh(new THREE.SphereGeometry(.03,16,12),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true}));dot.renderOrder=3;G.marker.add(dot);
+  G.halo=new THREE.Mesh(new THREE.SphereGeometry(.06,20,14),new THREE.MeshBasicMaterial({color:0x0A1328,transparent:true,opacity:.55,depthWrite:false}));G.halo.renderOrder=2;G.marker.add(G.halo);
+  G.globe.add(G.marker);
+  const box=$('#globeBox'),tip=$('#gtip'),ray=new THREE.Raycaster(),v2=new THREE.Vector2();
+  box.addEventListener('keydown',e=>{const m={ArrowLeft:[0,-.3],ArrowRight:[0,.3],ArrowUp:[-.2,0],ArrowDown:[.2,0]}[e.key];if(!m)return;e.preventDefault();G.tx=clamp(G.tx+m[0],-1.2,1.2);G.ty+=m[1];G.idle=0});
+  box.addEventListener('pointerdown',e=>{G.drag={x:e.clientX,y:e.clientY};box.classList.add('drag');box.setPointerCapture(e.pointerId);tip.hidden=true});
+  box.addEventListener('pointermove',e=>{
+    if(G.drag){G.ty+=(e.clientX-G.drag.x)*.006;G.tx=clamp(G.tx+(e.clientY-G.drag.y)*.006,-1.2,1.2);G.drag={x:e.clientX,y:e.clientY};G.idle=0;return}
+    if(!G.f)return;const r=box.getBoundingClientRect();v2.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(v2,G.cam);
+    const hit=ray.intersectObject(G.globe)[0];if(!hit||!hit.uv){tip.hidden=true;return}
+    const lon=hit.uv.x*360-180,lat=hit.uv.y*180-90,v=G.f(lat,lon),s=SCALES[G.layer];
+    const tr=prefs.lang==='tr',ns=lat>=0?(tr?'K':'N'):(tr?'G':'S'),ew=lon>=0?(tr?'D':'E'):(tr?'B':'W');
+    tip.hidden=false;tip.style.left=(e.clientX-r.left)+'px';tip.style.top=(e.clientY-r.top)+'px';
+    tip.innerHTML=`<b>${s.val(Math.max(G.layer==='temp'?-99:0,v))}</b> · ${Math.abs(lat).toFixed(0)}°${ns} ${Math.abs(lon).toFixed(0)}°${ew}`});
+  const end=()=>{G.drag=null;box.classList.remove('drag')};
+  box.addEventListener('pointerup',end);box.addEventListener('pointercancel',end);box.addEventListener('pointerleave',()=>{tip.hidden=true});
+  if('IntersectionObserver' in window)new IntersectionObserver(es=>{G.vis=es[0].isIntersecting}).observe(box);
+  gSize();let lt=0;
+  const loop=ts=>{const dt=Math.min(.05,(ts-lt)/1000||0);lt=ts;
+    if(G.vis){G.idle+=dt;if(!G.drag&&!still&&G.idle>5)G.ty+=dt*.06;
+      const k=Math.min(1,dt*6);G.rx+=(G.tx-G.rx)*k;G.ry+=(G.ty-G.ry)*k;G.globe.rotation.set(G.rx,G.ry,0,'XYZ');
+      G.halo.scale.setScalar(1+.25*Math.sin(ts/400));G.r.render(G.scene,G.cam)}
+    requestAnimationFrame(loop)};
+  requestAnimationFrame(loop);
+  return true;
+}
+function gSize(){if(!G.ok)return;const b=$('#globeBox');G.r.setSize(b.clientWidth,b.clientHeight,false);G.cam.aspect=b.clientWidth/b.clientHeight;
+  G.cam.position.z=G.cam.aspect<1?4.25/Math.max(.62,G.cam.aspect):4.25;G.cam.updateProjectionMatrix()}
+function paintTexture(){
+  const s=SCALES[G.layer],f=field(G.vals[G.layer]);G.f=f;
+  const dw=360,dh=180,dc=document.createElement('canvas');dc.width=dw;dc.height=dh;const dx=dc.getContext('2d'),id=dx.createImageData(dw,dh);
+  for(let y=0;y<dh;y++){const lat=89.5-y;for(let x=0;x<dw;x++){const v=f(lat,-179.5+x),c=colorAt(s,v),a=s.alpha?s.alpha(v):1,i=(y*dw+x)*4;id.data[i]=c[0];id.data[i+1]=c[1];id.data[i+2]=c[2];id.data[i+3]=a*235}}
+  dx.putImageData(id,0,0);
+  const x=G.tc.getContext('2d');x.fillStyle='#0C1F45';x.fillRect(0,0,TW,TH);x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';x.drawImage(dc,0,0,TW,TH);
+  const line=(ls,style,w)=>{x.strokeStyle=style;x.lineWidth=w;x.lineJoin='round';x.lineCap='round';x.beginPath();
+    ls.forEach(l=>l.forEach(([lo,la],i)=>{const px=(lo+180)/360*TW,py=(90-la)/180*TH;if(i===0||Math.abs(lo-l[i-1][0])>180)x.moveTo(px,py);else x.lineTo(px,py)}));x.stroke()};
+  line(BORD,'rgba(255,255,255,.3)',1.3);line(COAST,'rgba(255,255,255,.8)',2.2);
+  G.tex.needsUpdate=true;
+}
+function gLegend(){const s=SCALES[G.layer],lo=s.ticks[0],hi=s.ticks[s.ticks.length-1];
+  document.querySelectorAll('#gLayer button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===G.layer));
+  $('#gTitle').textContent=t('gTitles')[G.layer]+(s.unit?` (${s.unit()})`:G.layer==='temp'?` (${prefs.unitT==='f'?'°F':'°C'})`:'');
+  $('#gBar').style.background=`linear-gradient(90deg,${s.stops.filter(([v])=>v>=lo&&v<=hi).map(([v,c])=>`${c} ${((v-lo)/(hi-lo)*100).toFixed(1)}%`).join(',')})`;
+  $('#gTicks').innerHTML=s.ticks.map(v=>`<span>${s.tick(v)}</span>`).join('')}
+function gState(load){const e=$('#gState');if(load){e.textContent=t('gLoading');e.style.setProperty('--gs','#9AA9C0');return}
+  const live=G.live[G.layer];e.textContent=live?t('gLive'):G.err?t('gErr'):t('gSample');e.style.setProperty('--gs',live?'#4CC38A':'#E3B341')}
+async function gSetLayer(l){
+  G.layer=l;document.querySelectorAll('#gLayer button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===l));gLegend();
+  if(!G.ok)return;
+  if(!G.vals[l]){gState(true);let v=null;
+    if(S.live){try{v=await gFetch(l==='aqi'?'aqi':'wx')}catch(e){G.err=true}}
+    if(v){Object.assign(G.vals,v);Object.keys(v).forEach(k=>G.live[k]=true)}else G.vals[l]=gDemo(l);
+    if(G.layer!==l)return}
+  paintTexture();gState();
+}
+$('#gLayer').addEventListener('click',e=>{const b=e.target.closest('button');if(b)gSetLayer(b.dataset.v)});
+function globeFocus(){
+  if(!S.city||!gInit())return;
+  const la=S.city.lat*Math.PI/180,lo=S.city.lon*Math.PI/180;
+  G.marker.position.set(1.005*Math.cos(la)*Math.cos(lo),1.005*Math.sin(la),-1.005*Math.cos(la)*Math.sin(lo));
+  let ty=-Math.PI/2-lo;ty=G.ry+((((ty-G.ry)%(2*Math.PI))+3*Math.PI)%(2*Math.PI)-Math.PI);
+  G.ty=ty;G.tx=clamp(la*.85,-1.2,1.2);G.idle=0;
+  if(!G.started){G.started=true;G.ry=G.ty-.9;G.rx=G.tx;gSetLayer(G.layer)}
+}
+
+/* ---------- arayüz ---------- */
+const cSel=$('#country'),ciSel=$('#city');
+function fillCountries(){const v=cSel.value;cSel.length=0;PLACES.forEach(([c],i)=>cSel.add(new Option(prefs.lang==='en'?COUNTRY_EN[c]||c:c,i)));if(v!=='')cSel.value=v}
+function fillCities(i,pick){ciSel.length=0;const loc=prefs.lang==='en'?'en':'tr';PLACES[i][2].map(x=>x[0]).sort((a,b)=>cityName({name:a}).localeCompare(cityName({name:b}),loc)).forEach(n=>ciSel.add(new Option(cityName({name:n}),n)));if(pick)ciSel.value=pick}
+function sync(c){const i=PLACES.findIndex(p=>p[0]===c.country&&p[2].some(x=>x[0]===c.name));
+  const x=cSel.querySelector('[value="x"]');if(x)x.remove();
+  if(i>=0&&!c.raw){cSel.value=i;fillCities(i,c.name)}else{cSel.add(new Option(c.country||t('searchRes'),'x'),0);cSel.value='x';ciSel.length=0;ciSel.add(new Option(c.name,c.name))}}
+cSel.addEventListener('change',()=>{if(cSel.value==='x')return;const i=+cSel.value;go(ALL.find(a=>a.country===PLACES[i][0]))});
+ciSel.addEventListener('change',()=>{const c=ALL.find(a=>a.name===ciSel.value&&a.country===PLACES[+cSel.value]?.[0]);if(c)go(c)});
+function go(c){S.demoKind=null;S.factOff=0;chipState();sync(c);load(c)}
+const q=$('#q'),res=$('#results');let deb;
+function showRes(list){res.textContent='';if(!list.length){const n=document.createElement('div');n.className='none';n.textContent=t('noResult');res.append(n)}
+  list.forEach(c=>{const b=document.createElement('button');b.type='button';b.textContent=cityName(c);const s=document.createElement('small');s.textContent=[c.admin,countryName(c)].filter(Boolean).join(', ');b.append(s);b.addEventListener('click',()=>{res.hidden=true;q.value='';go(c)});res.append(b)});res.hidden=false}
+q.addEventListener('input',()=>{clearTimeout(deb);const v=q.value.trim();if(v.length<2){res.hidden=true;return}
+  deb=setTimeout(async()=>{const lv=v.toLocaleLowerCase(prefs.lang);const local=()=>ALL.filter(a=>a.name.toLocaleLowerCase('tr').includes(lv)||cityName(a).toLocaleLowerCase('en').includes(lv)).slice(0,6);
+    if(S.live===false)return showRes(local());
+    try{const j=await getJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(v)}&count=6&language=${prefs.lang}&format=json`);if(q.value.trim()!==v)return;
+      showRes((j.results||[]).map(r=>({name:r.name,country:r.country||'',admin:r.admin1||'',lat:r.latitude,lon:r.longitude,tz:r.timezone,raw:true})))}catch(e){showRes(local())}},280)});
+document.addEventListener('click',e=>{if(!e.target.closest('.field'))res.hidden=true});
+q.addEventListener('keydown',e=>{if(e.key==='Escape')res.hidden=true;if(e.key==='Enter'){const b=res.querySelector('button');if(b&&!res.hidden)b.click()}
+  if(e.key==='ArrowDown'&&!res.hidden){const b=res.querySelector('button');if(b){e.preventDefault();b.focus()}}});
+res.addEventListener('keydown',e=>{const bs=[...res.querySelectorAll('button')],i=bs.indexOf(document.activeElement);if(i<0)return;
+  if(e.key==='ArrowDown'){e.preventDefault();(bs[i+1]||bs[0]).focus()}else if(e.key==='ArrowUp'){e.preventDefault();i?bs[i-1].focus():q.focus()}else if(e.key==='Escape'){res.hidden=true;q.focus()}});
+/* segmentli düğmeler ve favoriler: sol/sağ ok tuşları */
+document.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;
+  const b=e.target.closest&&e.target.closest('.seg button, .fav');if(!b)return;
+  const grp=b.classList.contains('fav')?[...document.querySelectorAll('#favRow .fav')]:[...b.parentElement.querySelectorAll('button')];
+  const i=grp.indexOf(b),n=grp[(i+(e.key==='ArrowRight'?1:-1)+grp.length)%grp.length];if(!n)return;e.preventDefault();n.focus();
+  if(!n.classList.contains('fav'))n.click()});
+/* kısayollar */
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey||!$('#modal').hidden)return;const tg=e.target;if(tg.closest&&tg.closest('input,select,textarea,[contenteditable]'))return;
+  const k=e.key.toLowerCase();
+  if(e.key==='/'){e.preventDefault();q.focus()}else if(k==='k')locate();else if(k==='f')$('#favBtn').click();else if(k==='p')$('#shareBtn').click()});
+/* paylaşım penceresinde odak döngüsü */
+$('#modal').addEventListener('keydown',e=>{if(e.key!=='Tab')return;const f=[...$('#modal').querySelectorAll('button:not([disabled]):not([hidden])')];if(!f.length)return;
+  const a=f[0],z=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}});
+function buildChips(){const box=$('#chips');box.textContent='';Object.entries(t('kinds')).forEach(([k,n])=>{const b=document.createElement('button');b.className='chip';b.type='button';b.textContent=n;b.dataset.k=k;
+  b.addEventListener('click',()=>{S.demoKind=S.demoKind===k?null:k;S.factOff=0;chipState();S.data=demo(S.city,S.demoKind);render()});box.append(b)});chipState()}
+function chipState(){document.querySelectorAll('.chip').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===S.demoKind))}
+$('#mH').addEventListener('click',()=>setMode('h'));$('#mD').addEventListener('click',()=>setMode('d'));
+function setMode(m){S.mode=m;$('#mH').setAttribute('aria-pressed',m==='h');$('#mD').setAttribute('aria-pressed',m==='d');renderChart()}
+
+/* ---------- tema ---------- */
+const hostTheme=document.documentElement.getAttribute('data-theme');
+function applyTheme(){const r=document.documentElement;
+  if(prefs.theme==='auto'){if(hostTheme)r.setAttribute('data-theme',hostTheme);else r.removeAttribute('data-theme')}
+  else r.setAttribute('data-theme',prefs.theme)}
+
+/* ---------- paylaşılabilir hava kartı ---------- */
+let toastT;
+function toast(msg){const e=$('#toast');e.textContent=msg;e.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>e.hidden=true,2600)}
+function rr(x,X,Y,w,h,r){x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+w,Y,X+w,Y+h,r);x.arcTo(X+w,Y+h,X,Y+h,r);x.arcTo(X,Y+h,X,Y,r);x.arcTo(X,Y,X+w,Y,r);x.closePath()}
+function wrap(x,text,maxW){const words=text.split(' '),lines=[];let cur='';words.forEach(w=>{const tr=cur?cur+' '+w:w;if(x.measureText(tr).width>maxW&&cur){lines.push(cur);cur=w}else cur=tr});if(cur)lines.push(cur);return lines}
+function svgImg(svg){return new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="96" height="96">${svg}</svg>`)})}
+const DISP='"Bricolage Grotesque","Segoe UI",system-ui,sans-serif',BODY='"Instrument Sans","Segoe UI",system-ui,sans-serif';
+async function makeCard(fmt){
+  const d=S.data,c=d.cur,k=kindOf(c.code),today=d.daily[0],story=fmt==='story',w=1080,h=story?1920:1080;
+  const cvs=document.createElement('canvas');cvs.width=w;cvs.height=h;const x=cvs.getContext('2d');
+  try{await document.fonts.ready}catch(e){}
+  // gökyüzü sahnesini karta çiz (canlı sahneyle aynı çizim kodu)
+  const sv=[cx,W,H,SC.flash,SC.bolt,SC.next,last];cx=x;W=w;H=h;skyMul=w/430;
+  try{frame(performance.now(),true)}finally{[cx,W,H,SC.flash,SC.bolt,SC.next,last]=sv;skyMul=1}
+  let g=x.createLinearGradient(0,0,0,h*.22);g.addColorStop(0,'rgba(5,10,24,.35)');g.addColorStop(1,'rgba(5,10,24,0)');x.fillStyle=g;x.fillRect(0,0,w,h);
+  g=x.createLinearGradient(0,h*(story?.32:.12),0,h);g.addColorStop(0,'rgba(5,10,24,0)');g.addColorStop(.55,'rgba(5,10,24,.5)');g.addColorStop(1,'rgba(5,10,24,.82)');x.fillStyle=g;x.fillRect(0,0,w,h);
+  const P=80;x.textBaseline='alphabetic';x.fillStyle='#FFFFFF';x.shadowColor='rgba(0,0,0,.28)';x.shadowBlur=18;
+  // marka
+  const by=story?118:96;x.save();x.shadowBlur=0;x.fillStyle='#F5B041';x.beginPath();x.arc(P+20,by-14,15,0,6.29);x.fill();x.strokeStyle='#F5B041';x.lineWidth=5;x.lineCap='round';x.beginPath();
+  for(let i=0;i<8;i++){const a=i*Math.PI/4;x.moveTo(P+20+Math.cos(a)*24,by-14+Math.sin(a)*24);x.lineTo(P+20+Math.cos(a)*31,by-14+Math.sin(a)*31)}x.stroke();x.restore();
+  x.font=`700 46px ${DISP}`;x.fillText('HavaDuru',P+64,by);
+  x.font=`500 32px ${BODY}`;x.textAlign='right';x.globalAlpha=.85;x.fillText(hm(d.now),w-P,by);x.textAlign='left';x.globalAlpha=1;
+  // şehir, tarih, derece
+  let y=story?820:250;
+  x.font=`600 ${story?68:58}px ${DISP}`;const place=cityName(S.city);x.fillText(place,P,y);
+  y+=story?58:50;x.font=`500 ${story?36:32}px ${BODY}`;x.globalAlpha=.85;x.fillText(fmtDate(d.now)+(S.city.country?' · '+countryName(S.city):''),P,y);x.globalAlpha=1;
+  const ts=story?330:250;y+=story?300:230;x.font=`700 ${ts}px ${DISP}`;const tv=String(r0(TC(c.t)));x.fillText(tv,P-8,y);
+  const tw=x.measureText(tv).width;x.font=`600 ${ts*.3}px ${DISP}`;x.globalAlpha=.8;x.fillText(prefs.unitT==='f'?'°F':'°C',P-8+tw+12,y-ts*.58);x.globalAlpha=1;
+  y+=story?96:72;x.font=`600 ${story?64:52}px ${DISP}`;x.fillText(t('codes')[c.code]||'',P,y);
+  y+=story?56:46;x.font=`500 ${story?34:30}px ${BODY}`;x.globalAlpha=.88;
+  x.fillText(`${t('feels')} ${r0(TC(c.feels))}° · ${t('cardHi')} ${r0(TC(today.max))}° / ${t('cardLo')} ${r0(TC(today.min))}°`,P,y);x.globalAlpha=1;
+  // ölçüm çipleri
+  x.shadowBlur=0;y+=story?64:44;let cxp=P;x.font=`600 ${story?30:27}px ${BODY}`;
+  [[t('hum'),'%'+r0(c.hum)],[t('wind'),r0(WS(c.wind))+' '+wUnit()],...(d.aqi?[['AQI',String(r0(d.aqi.v))]]:[])].forEach(([l,v])=>{
+    const txt=`${l} ${v}`,cw=x.measureText(txt).width+44,ch=story?62:56;if(cxp+cw>w-P)return;
+    x.fillStyle='rgba(255,255,255,.16)';rr(x,cxp,y,cw,ch,ch/2);x.fill();x.fillStyle='#FFFFFF';x.fillText(txt,cxp+22,y+ch/2+(story?11:10));cxp+=cw+14});
+  // aktivite kutusu
+  const [ai,akey]=activity(k,c.t,c.isDay),[aTitle]=t('act')[akey];
+  const boxY=y+(story?110:92),ix=story?120:96,tx=P+40+ix+30,maxW=w-P-40-tx+P;
+  x.font=`600 ${story?44:38}px ${DISP}`;const lines=wrap(x,aTitle,w-P-40-tx);const lh=story?54:46;
+  const boxH=Math.max(ix+56,(story?92:80)+lines.length*lh);
+  x.fillStyle='rgba(255,255,255,.15)';rr(x,P,boxY,w-2*P,boxH,40);x.fill();
+  x.fillStyle='rgba(255,255,255,.92)';rr(x,P+28,boxY+(boxH-ix)/2,ix,ix,30);x.fill();
+  const im=await svgImg(AI[ai][1]);if(im)x.drawImage(im,P+28+ix*.16,boxY+(boxH-ix)/2+ix*.16,ix*.68,ix*.68);
+  x.fillStyle='#FFFFFF';x.font=`600 ${story?24:22}px ${BODY}`;x.globalAlpha=.75;x.fillText(t('cardAct'),tx,boxY+(story?62:54));x.globalAlpha=1;
+  x.font=`600 ${story?44:38}px ${DISP}`;lines.forEach((l,i)=>x.fillText(l,tx,boxY+(story?118:100)+i*lh));
+  // alt bilgi
+  x.font=`500 ${story?26:22}px ${BODY}`;x.globalAlpha=.6;x.textAlign='center';x.fillText('HavaDuru · Open-Meteo',w/2,h-(story?64:34));x.textAlign='left';x.globalAlpha=1;
+  return new Promise(res=>cvs.toBlob(res,'image/png'));
+}
+const SH={fmt:'story',blob:null,url:null,busy:false};
+const cardName=()=>`havaduru-${(cityName(S.city)||'sehir').toLocaleLowerCase('tr').replace(/ı/g,'i').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}-${new Date(S.data.now).toISOString().slice(0,10)}-${SH.fmt}.png`;
+async function buildCard(){
+  SH.busy=true;$('#mSave').disabled=true;$('#mShare').disabled=true;
+  document.querySelectorAll('#mFmt button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===SH.fmt));
+  const blob=await makeCard(SH.fmt);SH.busy=false;if(!blob)return;
+  if(SH.url)URL.revokeObjectURL(SH.url);SH.blob=blob;SH.url=URL.createObjectURL(blob);
+  const prev=$('#mPrev');prev.textContent='';const im=new Image();im.alt=t('shareT');im.src=SH.url;prev.append(im);
+  $('#mSave').disabled=false;$('#mShare').disabled=false;
+  let can=false;try{can=!!(navigator.canShare&&navigator.canShare({files:[new File([blob],cardName(),{type:'image/png'})]}))}catch(e){}
+  $('#mShare').hidden=!can;
+}
+let lastFocus=null;
+function openShare(){if(!S.data)return;lastFocus=document.activeElement;$('#modal').hidden=false;$('#mPrev').innerHTML=`<span>${t('making')}</span>`;buildCard();$('#mClose').focus()}
+function closeShare(){$('#modal').hidden=true;if(lastFocus)lastFocus.focus()}
+$('#shareBtn').addEventListener('click',openShare);
+$('#mClose').addEventListener('click',closeShare);
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeShare()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeShare()});
+$('#mFmt').addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.v===SH.fmt||SH.busy)return;SH.fmt=b.dataset.v;buildCard()});
+$('#mSave').addEventListener('click',async()=>{
+  if(!SH.blob)return;const name=cardName();
+  let dl=null;try{dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null}catch(e){}
+  if(dl){try{await dl.save({filename:name,data:SH.blob});toast(t('saved'))}catch(e){if(e&&e.code!=='declined')toast(t('saveFail'))}return}
+  const a=document.createElement('a');a.href=SH.url;a.download=name;document.body.append(a);a.click();a.remove();toast(t('saved'));
+});
+$('#mShare').addEventListener('click',async()=>{if(!SH.blob)return;try{await navigator.share({files:[new File([SH.blob],cardName(),{type:'image/png'})],title:'HavaDuru'})}catch(e){}});
+
+/* birim ve dil */
+function applyStatic(){
+  document.documentElement.lang=prefs.lang;
+  document.querySelectorAll('[data-t]').forEach(el=>el.textContent=t(el.dataset.t));
+  document.querySelectorAll('[data-tp]').forEach(el=>el.placeholder=t(el.dataset.tp));
+  document.querySelectorAll('[data-ta]').forEach(el=>{el.setAttribute('aria-label',t(el.dataset.ta));el.title=t(el.dataset.ta)});
+  $('#kmhBtn').textContent=t('kmh');$('#keys').innerHTML=t('keys');
+  [['#uT','unitT'],['#uW','unitW'],['#uL','lang'],['#uTh','theme']].forEach(([id,k])=>document.querySelectorAll(id+' button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===prefs[k])));
+  playBtn();if(RD.msg)mapMsg(RD.msg);
+  gLegend();if(G.started)gState();if(G.ok===false)gMsg(t('gNoGL'));
+}
+[['#uT','unitT'],['#uW','unitW'],['#uL','lang'],['#uTh','theme']].forEach(([id,k])=>$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b||prefs[k]===b.dataset.v)return;
+  prefs[k]=b.dataset.v;store.set('hd-prefs',prefs);applyStatic();if(k==='theme'){applyTheme();return}
+  if(k==='lang'){fillCountries();if(S.city)sync(S.city);buildChips()}
+  render();renderFavs();
+}));
+
+let rz;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{size();renderChart();if(still)frame(0,true);if(RD.map)RD.map.invalidateSize();gSize()},120)});
+setInterval(()=>{if(S.city&&S.live){load(S.city);loadFavs()}},10*60*1000);
+
+let start=store.get('hd-city',null);if(!start||typeof start.lat!=='number')start=ALL[0];
+applyTheme();fillCountries();buildChips();applyStatic();renderFavs();size();sync(start);load(start);
+if(!still)requestAnimationFrame(frame);
+})();
+</script>
+
+</body>
+</html>
